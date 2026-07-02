@@ -1,36 +1,59 @@
-# 🌡️ Îlot de Chaleur Urbain à Lyon — Modèle naïf vs réalité
+# 🌡️ Îlot de Chaleur Urbain à Lyon — vraies données ouvertes
 
-> *« J'ai voulu prédire les quartiers les plus chauds de Lyon pendant la canicule avec une simple régression linéaire. Elle s'en sort bien... jusqu'à ce qu'on regarde de près. Voici pourquoi. »*
+> *« Pendant la canicule, je me suis demandé pourquoi certaines communes de Lyon restent invivables la nuit quand d'autres respirent. J'ai creusé les vraies données de la Métropole. Voilà ce qu'elles disent — et pourquoi un beau R² peut mentir. »*
 
 **▶️ Démo en ligne : [canicule-lyon-icu-model.streamlit.app](https://canicule-lyon-icu-model.streamlit.app/)**
 
-Un dashboard Streamlit qui modélise l'îlot de chaleur urbain (ICU) à Lyon avec une simple régression linéaire, puis confronte les prédictions à la réalité pour montrer **pourquoi un modèle simple ne suffit pas** pour capturer la chaleur en ville.
+Un dashboard Streamlit qui explique, à partir de **vraies données ouvertes de la Métropole de Lyon**, ce qui rend une commune chaude la nuit en été — et qui montre au passage pourquoi il faut se méfier d'un R² flatteur sur un petit échantillon.
 
 ## 🎯 L'idée
 
-À partir de 3 variables faciles à obtenir, peut-on prédire l'écart de température entre un quartier et la campagne pendant une nuit de canicule ?
+Question prise à l'endroit : **qu'est-ce qui explique la chaleur nocturne d'une commune ?**
 
-- 🌳 **Végétation** (indice NDVI estimé par quartier, entre 0 = béton et 1 = forêt)
-- 🏘️ **Densité de population** (INSEE, proxy de l'artificialisation)
-- 📍 **Distance au centre-ville** (Bellecour)
+On confronte trois ingrédients de la surface au sol au score d'exposition nocturne à la chaleur :
 
-Méthode : régression linéaire sur variables standardisées, puis analyse des écarts (résidus) entre prédiction et réalité.
+- 🌿 **Végétation** (% de surface : parcs, arbres, espaces verts)
+- 🏙️ **Bâti compact** (% de surface : immeubles serrés, cœurs urbains denses)
+- 🪨 **Sol minéral** (% de surface : béton, bitume, surfaces imperméables)
+
+Méthode : régression linéaire sur variables standardisées, validation croisée (5 folds), puis analyse des écarts (résidus) entre prédiction et réalité.
+
+## 🗂️ Les données (réelles)
+
+Tout vient d'un seul jeu ouvert et officiel : la couche **« Îlots de chaleur urbains »** de [data.grandlyon.com](https://data.grandlyon.com), produite avec le logiciel scientifique **GEOCLIMATE** (méthode de l'Institut Paris Région).
+
+- Chaque îlot est classé en **Local Climate Zone (LCZ)** — la typologie internationale de forme urbaine.
+- Chaque îlot reçoit une **exposition nocturne à la chaleur** (de « effet rafraîchissant » à « fort »).
+- Les **29 657 îlots** ont été agrégés par commune (pondéré par la surface) pour obtenir, d'un côté la composition du sol, de l'autre un **score d'exposition** moyen — la cible du modèle.
+- Résultat : **67 communes / arrondissements** de la Métropole (celles comptant au moins 20 îlots).
+
+Ce sont de **vraies mesures d'aménagement**, pas des relevés de thermomètre : l'exposition est un indicateur calculé, à lire comme tel.
 
 ## 🔬 Ce que montre le dashboard
 
-- La **formule** du modèle et le poids de chaque variable
-- Le **réel vs prédit** quartier par quartier
-- Les **résidus** : où le modèle se trompe le plus (l'écart entre réalité et prédiction)
-- Une section **« Limites du modèle »** qui assume la fragilité des données et de la méthode
+- La **carte** de la chaleur nocturne sur toute la Métropole
+- Le **poids de chaque variable** : le bâti compact est le moteur numéro un
+- Un **simulateur** interactif : compose une commune et regarde le modèle recalculer l'exposition
+- Le **réel vs prédit**, commune par commune, avec un explorateur pour fouiller chaque commune
+- Les **résidus** : là où le modèle se trompe le plus
+- La **leçon data** : R² en apprentissage vs validation croisée
 
-Le modèle explique une grande part de la variance sur cet échantillon, mais c'est justement là que se cache le piège : **14 quartiers, c'est trop peu pour conclure**, et les données sont des estimations, pas des mesures satellite. Le dashboard l'explique en toute transparence.
+## 💡 La leçon data science
+
+Le modèle affiche un **R² d'environ 87 % en apprentissage**. Superbe — sauf que la **validation croisée le ramène autour de 64 %**, avec des écarts énormes d'un découpage à l'autre. Sur 67 communes seulement, le premier chiffre flatte, le second dit la vérité : la vraie capacité à généraliser est plus modeste et instable.
+
+Le vrai travail n'est pas d'obtenir un beau chiffre, c'est de savoir à quel point lui faire confiance :
+
+- **Petit échantillon** : 67 communes, un modèle mémorise vite et surestime sa performance.
+- **Analyse agrégée** : la moyenne par commune lisse les contrastes internes (un parc et une dalle béton dans la même case).
+- **Cible calculée** : l'exposition vient d'un modèle (GEOCLIMATE), pas d'un thermomètre.
 
 ## 🛠️ Stack technique
 
 - Python 3.11+
 - Streamlit (dashboard interactif)
-- Pandas, NumPy, Scikit-learn (modèle)
-- Plotly (visualisations)
+- Pandas, NumPy, Scikit-learn (modèle + validation croisée)
+- Plotly (visualisations, carte)
 
 ## 🚀 Lancer l'app en local
 
@@ -41,16 +64,29 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-L'app s'ouvre ensuite dans le navigateur (par défaut sur http://localhost:8501).
+L'app s'ouvre dans le navigateur (par défaut sur http://localhost:8501).
+
+## 🔄 Reproduire le jeu de données
+
+Le CSV agrégé est déjà versionné (`data/communes_lyon.csv`), l'app fonctionne sans rien télécharger. Pour le régénérer depuis la source ouverte :
+
+```bash
+pip install requests
+python data/build_dataset.py
+```
+
+Le script télécharge les 29 657 îlots via le service WFS de data.grandlyon.com, les classe par LCZ et les agrège par commune. `requests` n'est utilisé que par ce script (hors runtime de l'app).
 
 ## 📁 Structure du projet
 
 ```
 ├── app.py                      # App Streamlit principale
 ├── model/
-│   └── naive_model.py          # Modèle naïf (régression linéaire) + détection des écarts
+│   └── naive_model.py          # Régression linéaire + validation croisée + résidus
 ├── data/
-│   └── quartiers_lyon.py       # Données des 14 quartiers (reproductibles)
+│   ├── communes_lyon.csv       # Jeu agrégé (67 communes) — versionné
+│   ├── dataset.py              # Chargement du CSV + descriptions des variables
+│   └── build_dataset.py        # Script de génération depuis l'open data (dev)
 ├── utils/
 │   └── viz.py                  # Graphiques Plotly (charte commune)
 ├── .streamlit/config.toml      # Thème de l'app
@@ -59,21 +95,10 @@ L'app s'ouvre ensuite dans le navigateur (par défaut sur http://localhost:8501)
 └── README.md
 ```
 
-## 💡 La leçon data science
-
-Sur un si petit jeu de données, un R² élevé est plus une **alerte** qu'une victoire. Les phénomènes qui pilotent vraiment la chaleur urbaine — orientation des rues, albédo des matériaux, canyons urbains, présence d'eau, flux de chaleur nocturne — ne tiennent pas dans 3 colonnes de CSV.
-
-C'est ça, la vraie complexité de la modélisation climatique urbaine : les modèles sérieux (MApUCE, TEB de Météo-France) demandent des années de calibration, pas une régression linéaire.
-
-## ⚠️ Honnêteté sur les données
-
-Projet **pédagogique**. Les valeurs NDVI sont des estimations par quartier (pas des mesures satellite pixel par pixel), et les écarts de température sont des ordres de grandeur tirés de publications Météo-France, pas des relevés station par station. Les chiffres illustrent un raisonnement, ils ne guident aucune décision d'aménagement.
-
 ## 📄 Licence
 
-MIT — voir [LICENSE](LICENSE). Données ICU : publications Météo-France (Licence Ouverte Etalab). Population : INSEE 2021.
+MIT — voir [LICENSE](LICENSE). Données : Métropole de Lyon, couche « Îlots de chaleur urbains » calculée avec GEOCLIMATE, publiée sous **Licence Ouverte Etalab** sur [data.grandlyon.com](https://data.grandlyon.com).
 
 ---
 
-*Badreddine EL KHAMLICHI · Ingénieur en mathématiques appliquées · Lyon*
-
+*Badreddine EL KHAMLICHI · Ingénieur en mathématiques appliquées · Lyon · [badreddineek.com](https://badreddineek.com)*

@@ -1,7 +1,6 @@
 """
 Helpers de visualisation Plotly pour le dashboard.
 Palette et mise en page centralisées pour garder tous les graphiques cohérents.
-Le seuil d'écart utilisé pour repérer un quartier mal prédit.
 """
 
 import numpy as np
@@ -9,17 +8,18 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# Seuil (en °C) au-delà duquel une prédiction est considérée comme "ratée".
-# Doit rester aligné avec model.naive_model.identify_outliers.
-OUTLIER_THRESHOLD = 0.8
+# Seuil de résidu (en points de score) au-delà duquel on considère que le modèle
+# se trompe nettement. Doit rester aligné avec model.naive_model.identify_outliers.
+OUTLIER_THRESHOLD = 0.2
 
 # Palette cohérente sur tous les graphiques
-COLOR_REEL = "#E74C3C"      # rouge : température réelle
+COLOR_REEL = "#E74C3C"      # rouge : valeur réelle
 COLOR_PREDIT = "#3498DB"    # bleu : prédiction du modèle
 COLOR_WARM = "#E74C3C"      # effet réchauffant (coefficient positif)
 COLOR_COOL = "#3498DB"      # effet rafraîchissant (coefficient négatif)
-COLOR_OUTLIER = "#F39C12"   # orange : quartier mal prédit
-COLOR_OK = "#2ECC71"        # vert : quartier bien prédit
+COLOR_OUTLIER = "#F39C12"   # orange : commune mal prédite
+COLOR_OK = "#2ECC71"        # vert : commune bien prédite
+
 
 def _palette(theme: str) -> dict:
     """Couleurs de fond, texte, grille et lignes de repère selon le thème actif."""
@@ -52,70 +52,57 @@ def _apply_theme(fig: go.Figure, height: int, theme: str) -> go.Figure:
 
 
 @st.cache_data(show_spinner=False)
-def plot_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray, theme: str = "dark") -> go.Figure:
-    """Graphique en barres groupées : ICU réel vs prédit par quartier."""
-    fig = go.Figure()
-
-    fig.add_trace(go.Bar(
-        name="ICU réel (référence Météo-France)",
-        x=df["quartier"],
-        y=df["icu_reel"],
-        marker_color=COLOR_REEL,
-        opacity=0.85,
-    ))
-
-    fig.add_trace(go.Bar(
-        name="ICU prédit (modèle naïf)",
-        x=df["quartier"],
-        y=predictions,
-        marker_color=COLOR_PREDIT,
-        opacity=0.85,
-    ))
-
-    fig.update_layout(
-        barmode="group",
-        title="Écart de température ICU : réalité vs modèle naïf",
-        xaxis_title="Quartier",
-        yaxis_title="ΔT vs zone rurale de référence (°C)",
-        xaxis_tickangle=-35,
-        legend=dict(orientation="h", y=1.15),
-    )
-    return _apply_theme(fig, height=450, theme=theme)
-
-
-@st.cache_data(show_spinner=False)
-def plot_residuals(df_out: pd.DataFrame, theme: str = "dark") -> go.Figure:
-    """Graphique des résidus — met en évidence les quartiers problématiques."""
-    p = _palette(theme)
-    colors = [COLOR_OUTLIER if o else COLOR_OK for o in df_out["is_outlier"]]
-
+def plot_top_communes(df: pd.DataFrame, n: int = 15, theme: str = "light") -> go.Figure:
+    """Classement des communes les plus exposées à la chaleur nocturne."""
+    d = df.sort_values("expo_nuit_score", ascending=True).tail(n)
+    colors = [
+        COLOR_REEL if v > 0.6 else (COLOR_PREDIT if v < 0 else "#E67E22")
+        for v in d["expo_nuit_score"]
+    ]
     fig = go.Figure(go.Bar(
-        x=df_out["quartier"],
-        y=df_out["residual"],
+        x=d["expo_nuit_score"],
+        y=d["commune"],
+        orientation="h",
         marker_color=colors,
-        text=[f"{v:+.2f}°C" for v in df_out["residual"]],
+        text=[f"{v:+.2f}" for v in d["expo_nuit_score"]],
         textposition="outside",
     ))
-
-    fig.add_hline(y=0, line_dash="dot", line_color=p["ref"], opacity=0.6)
-    fig.add_hline(y=OUTLIER_THRESHOLD, line_dash="dash", line_color=COLOR_OUTLIER, opacity=0.5,
-                  annotation_text=f"seuil d'alerte (+{OUTLIER_THRESHOLD}°C)", annotation_position="top right")
-    fig.add_hline(y=-OUTLIER_THRESHOLD, line_dash="dash", line_color=COLOR_OUTLIER, opacity=0.5)
-
     fig.update_layout(
-        title="Résidus : écart entre réalité et prédiction (°C)",
-        xaxis_title="Quartier",
-        yaxis_title="Erreur du modèle (°C)",
-        xaxis_tickangle=-35,
+        title=f"Les {n} communes les plus exposées à la chaleur la nuit",
+        xaxis_title="Score d'exposition nocturne (−1 rafraîchissant → +2 fort)",
     )
-    return _apply_theme(fig, height=420, theme=theme)
+    return _apply_theme(fig, height=480, theme=theme)
 
 
 @st.cache_data(show_spinner=False)
-def plot_correlation_matrix(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
+def plot_residuals(df_out: pd.DataFrame, n: int = 12, theme: str = "light") -> go.Figure:
+    """Communes où le modèle se trompe le plus (plus gros résidus)."""
+    p = _palette(theme)
+    d = df_out.sort_values("abs_residual", ascending=False).head(n)
+    d = d.sort_values("residual")
+    colors = [COLOR_OUTLIER if o else COLOR_OK for o in d["is_outlier"]]
+
+    fig = go.Figure(go.Bar(
+        x=d["residual"],
+        y=d["commune"],
+        orientation="h",
+        marker_color=colors,
+        text=[f"{v:+.2f}" for v in d["residual"]],
+        textposition="outside",
+    ))
+    fig.add_vline(x=0, line_dash="dot", line_color=p["ref"], opacity=0.6)
+    fig.update_layout(
+        title="Là où le modèle se trompe le plus (résidus)",
+        xaxis_title="Erreur du modèle (réel − prédit)",
+    )
+    return _apply_theme(fig, height=440, theme=theme)
+
+
+@st.cache_data(show_spinner=False)
+def plot_correlation_matrix(df: pd.DataFrame, theme: str = "light") -> go.Figure:
     """Heatmap de corrélation entre les variables et la cible."""
-    cols = ["ndvi", "densite_pop", "dist_centre_km", "icu_reel"]
-    labels = ["Végétation (NDVI)", "Densité pop.", "Dist. centre (km)", "ICU réel (°C)"]
+    cols = ["pct_vegetation", "pct_compact", "pct_mineral", "expo_nuit_score"]
+    labels = ["Végétation", "Bâti compact", "Minéral", "Expo. nuit"]
     corr = df[cols].corr()
 
     fig = go.Figure(go.Heatmap(
@@ -128,23 +115,22 @@ def plot_correlation_matrix(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         texttemplate="%{text}",
         showscale=True,
     ))
-
     fig.update_layout(title="Corrélations entre variables")
     return _apply_theme(fig, height=380, theme=theme)
 
 
 @st.cache_data(show_spinner=False)
-def plot_feature_importance(coefficients: dict, theme: str = "dark") -> go.Figure:
+def plot_feature_importance(coefficients: dict, theme: str = "light") -> go.Figure:
     """Barres horizontales des coefficients standardisés du modèle."""
     p = _palette(theme)
     labels = {
-        "ndvi": "Végétation (NDVI)",
-        "densite_pop": "Densité population",
-        "dist_centre_km": "Distance au centre",
+        "pct_vegetation": "Végétation",
+        "pct_compact": "Bâti compact",
+        "pct_mineral": "Sol minéral",
     }
     feats = list(coefficients.keys())
     coefs = list(coefficients.values())
-    # Bleu = fait baisser la température (coef négatif), rouge = fait monter (coef positif)
+    # Bleu = fait baisser l'exposition (coef négatif), rouge = fait monter (positif)
     colors = [COLOR_COOL if c < 0 else COLOR_WARM for c in coefs]
 
     fig = go.Figure(go.Bar(
@@ -155,60 +141,60 @@ def plot_feature_importance(coefficients: dict, theme: str = "dark") -> go.Figur
         text=[f"{c:+.3f}" for c in coefs],
         textposition="outside",
     ))
-
     fig.add_vline(x=0, line_color=p["ref"], opacity=0.6)
     fig.update_layout(
-        title="Importance des variables (coefficients standardisés)",
+        title="Ce qui pèse sur la chaleur nocturne (coefficients standardisés)",
         xaxis_title="Coefficient",
     )
     return _apply_theme(fig, height=280, theme=theme)
 
 
 @st.cache_data(show_spinner=False)
-def plot_scatter_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray, theme: str = "dark") -> go.Figure:
-    """Nuage de points réel vs prédit avec la droite de prédiction parfaite."""
+def plot_scatter_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray, theme: str = "light") -> go.Figure:
+    """Nuage réel vs prédit sur les 67 communes, avec la droite parfaite."""
     p = _palette(theme)
-    y_reel = df["icu_reel"].values
-    min_v, max_v = min(y_reel.min(), predictions.min()), max(y_reel.max(), predictions.max())
+    y_reel = df["expo_nuit_score"].values
+    resid = y_reel - predictions
+    min_v = min(y_reel.min(), predictions.min())
+    max_v = max(y_reel.max(), predictions.max())
+
+    # On n'étiquette que les communes mal prédites, pour rester lisible.
+    labels = [c if abs(r) > OUTLIER_THRESHOLD else "" for c, r in zip(df["commune"], resid)]
 
     fig = go.Figure()
-
-    # Ligne parfaite y=x
     fig.add_trace(go.Scatter(
         x=[min_v, max_v], y=[min_v, max_v],
         mode="lines",
         line=dict(color=p["ref"], dash="dot", width=1),
         name="Prédiction parfaite",
-        showlegend=True,
     ))
-
     fig.add_trace(go.Scatter(
         x=y_reel,
         y=predictions,
         mode="markers+text",
         marker=dict(
-            size=10,
-            color=[COLOR_OUTLIER if abs(r - p) > OUTLIER_THRESHOLD else COLOR_OK
-                   for r, p in zip(y_reel, predictions)],
+            size=9,
+            color=[COLOR_OUTLIER if abs(r) > OUTLIER_THRESHOLD else COLOR_OK for r in resid],
         ),
-        text=df["quartier"],
+        text=labels,
         textposition="top center",
         textfont=dict(size=9),
-        name="Quartiers",
+        name="Communes",
+        hovertext=df["commune"],
+        hovertemplate="<b>%{hovertext}</b><br>réel : %{x:.2f}<br>prédit : %{y:.2f}<extra></extra>",
     ))
-
     fig.update_layout(
-        title="Valeurs réelles vs prédites",
-        xaxis_title="ICU réel (°C)",
-        yaxis_title="ICU prédit (°C)",
+        title="Score réel vs prédit (une commune = un point)",
+        xaxis_title="Exposition nocturne réelle",
+        yaxis_title="Exposition nocturne prédite",
+        showlegend=False,
     )
-    return _apply_theme(fig, height=420, theme=theme)
+    return _apply_theme(fig, height=460, theme=theme)
 
 
 @st.cache_data(show_spinner=False)
-def plot_heat_map(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
-    """Carte de Lyon : chaque quartier coloré et dimensionné selon l'intensité
-    de l'îlot de chaleur (écart de température réel vs zone rurale)."""
+def plot_heat_map(df: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Carte des communes colorées selon leur exposition nocturne à la chaleur."""
     p = _palette(theme)
     map_style = "carto-positron" if theme == "light" else "carto-darkmatter"
 
@@ -217,27 +203,21 @@ def plot_heat_map(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         lon=df["lon"],
         mode="markers",
         marker=dict(
-            size=df["icu_reel"] * 5 + 12,
-            color=df["icu_reel"],
-            colorscale="YlOrRd",
-            cmin=0,
-            cmax=float(df["icu_reel"].max()),
-            colorbar=dict(title="ΔT (°C)"),
-            opacity=0.9,
+            size=(df["expo_nuit_score"] - df["expo_nuit_score"].min()) * 12 + 9,
+            color=df["expo_nuit_score"],
+            colorscale="RdYlBu_r",
+            cmid=0,
+            colorbar=dict(title="Expo.<br>nuit"),
+            opacity=0.85,
         ),
-        text=df["quartier"],
-        customdata=df["icu_reel"],
-        hovertemplate="<b>%{text}</b><br>ΔT vs campagne : %{customdata:.1f} °C<extra></extra>",
+        text=df["commune"],
+        customdata=df["expo_nuit_score"],
+        hovertemplate="<b>%{text}</b><br>Exposition nocturne : %{customdata:.2f}<extra></extra>",
     ))
-
     fig.update_layout(
-        title="Où se concentre la chaleur ? Les îlots de chaleur de Lyon",
-        mapbox=dict(
-            style=map_style,
-            center=dict(lat=45.762, lon=4.86),
-            zoom=10.1,
-        ),
-        height=520,
+        title="Carte de la chaleur nocturne — Métropole de Lyon",
+        mapbox=dict(style=map_style, center=dict(lat=45.75, lon=4.87), zoom=9.6),
+        height=540,
         margin=dict(l=10, r=10, t=70, b=10),
         paper_bgcolor=p["bg"],
         font=dict(color=p["font"], size=13),
@@ -247,22 +227,22 @@ def plot_heat_map(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
     return fig
 
 
-def plot_gauge(value: float, theme: str = "light", vmax: float = 7.0) -> go.Figure:
-    """Jauge (thermomètre) affichant un écart de température prédit."""
+def plot_gauge(value: float, theme: str = "light", vmin: float = -1.0, vmax: float = 2.0) -> go.Figure:
+    """Jauge affichant un score d'exposition nocturne prédit."""
     p = _palette(theme)
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=value,
-        number={"suffix": " °C", "font": {"size": 42, "color": p["font"]}},
+        number={"font": {"size": 42, "color": p["font"]}},
         gauge={
-            "axis": {"range": [0, vmax], "tickcolor": p["font"], "tickfont": {"color": p["font"]}},
+            "axis": {"range": [vmin, vmax], "tickcolor": p["font"], "tickfont": {"color": p["font"]}},
             "bar": {"color": COLOR_REEL},
             "bgcolor": p["bg"],
             "borderwidth": 0,
             "steps": [
-                {"range": [0, vmax * 0.33], "color": "#D6EAF8"},
-                {"range": [vmax * 0.33, vmax * 0.66], "color": "#FAD7A0"},
-                {"range": [vmax * 0.66, vmax], "color": "#F5B7B1"},
+                {"range": [vmin, 0], "color": "#AED6F1"},
+                {"range": [0, 1], "color": "#FAD7A0"},
+                {"range": [1, vmax], "color": "#F5B7B1"},
             ],
         },
     ))
