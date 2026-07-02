@@ -38,11 +38,16 @@ def safe_plot(fig_func, *args, **kwargs):
 
 
 def get_active_theme() -> str:
-    """Renvoie le thème actif ('light' ou 'dark') pour adapter les graphiques."""
+    """Renvoie le thème actif ('light' ou 'dark') pour adapter les graphiques.
+    On se base sur le thème réellement configuré (config.toml) : c'est ce qui
+    pilote l'apparence de la page, donc les graphiques restent toujours cohérents."""
     try:
-        return getattr(st.context.theme, "type", None) or "light"
+        base = st.get_option("theme.base")
+        if base in ("light", "dark"):
+            return base
     except Exception:
-        return "light"
+        pass
+    return "light"
 
 # ─────────────────────────────────────
 # LOAD DATA & TRAIN MODEL
