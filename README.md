@@ -1,10 +1,10 @@
-# 🌡️ Îlot de Chaleur Urbain à Lyon — vraies données ouvertes
+# 🌡️ Chaleur nocturne à Lyon — au grain fin
 
-> *« Pendant la canicule, je me suis demandé pourquoi certaines communes de Lyon restent invivables la nuit quand d'autres respirent. J'ai creusé les vraies données de la Métropole. Voilà ce qu'elles disent — et pourquoi un beau R² peut mentir. »*
+> *« Pendant la canicule, je me suis demandé pourquoi certains coins de Lyon restaient étouffants la nuit quand d'autres respiraient. J'ai pris les vraies données de la Métropole, îlot par îlot. Et j'ai découvert que mon plus beau R² était aussi le plus trompeur. »*
 
 **▶️ Démo en ligne : [canicule-lyon-icu-model.streamlit.app](https://canicule-lyon-icu-model.streamlit.app/)**
 
-Un dashboard Streamlit qui explique, à partir de **vraies données ouvertes de la Métropole de Lyon**, ce qui rend une commune chaude la nuit en été — et qui montre au passage pourquoi il faut se méfier d'un R² flatteur sur un petit échantillon.
+Un dashboard Streamlit qui cartographie l'îlot de chaleur urbain de Lyon à partir de **vraies données ouvertes**, au grain de l'îlot (~29 657 points réels) — et qui montre au passage **le piège de l'agrégation** : en résumant chaque commune à un chiffre, on décroche un R² flatteur en jetant 99,8 % du signal.
 
 ## 🎯 L'idée
 
@@ -31,22 +31,19 @@ Ce sont de **vraies mesures d'aménagement**, pas des relevés de thermomètre :
 
 ## 🔬 Ce que montre le dashboard
 
-- La **carte** de la chaleur nocturne sur toute la Métropole
-- Le **poids de chaque variable** : le bâti compact est le moteur numéro un
-- Un **simulateur** interactif : compose une commune et regarde le modèle recalculer l'exposition
-- Le **réel vs prédit**, commune par commune, avec un explorateur pour fouiller chaque commune
-- Les **résidus** : là où le modèle se trompe le plus
-- La **leçon data** : R² en apprentissage vs validation croisée
+- La **carte au grain fin** : ~29 657 îlots réels, colorés du bleu (rafraîchissant) au rouge (fort), lisibles rue par rue
+- Le **piège de l'agrégation** : la même réalité moyennée en 67 communes, un R² de 87 %… et pourquoi il ment
+- Un **explorateur** : zoom sur les îlots d'une commune pour voir son contraste interne (un parc frais à côté d'un cœur dense brûlant)
+- La **tendance de fond** : bâti compact → chaleur, coefficients et classement des communes
+- Un **simulateur** interactif de la relation encodée par la donnée
 
 ## 💡 La leçon data science
 
-Le modèle affiche un **R² d'environ 87 % en apprentissage**. Superbe — sauf que la **validation croisée le ramène autour de 64 %**, avec des écarts énormes d'un découpage à l'autre. Sur 67 communes seulement, le premier chiffre flatte, le second dit la vérité : la vraie capacité à généraliser est plus modeste et instable.
+Le plus beau chiffre du projet, un **R² de 87 %**, est aussi le plus trompeur : il vient d'avoir agrégé 29 657 mesures en 67 points. La **validation croisée le ramène à ~64 %** (très instable), et le grain fin le démasque.
 
-Le vrai travail n'est pas d'obtenir un beau chiffre, c'est de savoir à quel point lui faire confiance :
-
-- **Petit échantillon** : 67 communes, un modèle mémorise vite et surestime sa performance.
-- **Analyse agrégée** : la moyenne par commune lisse les contrastes internes (un parc et une dalle béton dans la même case).
-- **Cible calculée** : l'exposition vient d'un modèle (GEOCLIMATE), pas d'un thermomètre.
+- **La bonne échelle** n'est pas la plus pratique, c'est celle où vit le phénomène — ici l'îlot, pas la commune.
+- **Agréger gonfle mécaniquement les corrélations** : un chiffre flatteur mérite toujours qu'on cherche ce qu'il cache.
+- **Honnêteté sur la donnée** : l'exposition est un indicateur calculé par GEOCLIMATE à partir de la forme urbaine. La relation « bâti compact → chaleur » est donc en partie encodée dans la donnée : on la **visualise**, on ne la « découvre » pas. C'est de la lecture de données, pas une preuve causale.
 
 ## 🛠️ Stack technique
 
@@ -68,14 +65,14 @@ L'app s'ouvre dans le navigateur (par défaut sur http://localhost:8501).
 
 ## 🔄 Reproduire le jeu de données
 
-Le CSV agrégé est déjà versionné (`data/communes_lyon.csv`), l'app fonctionne sans rien télécharger. Pour le régénérer depuis la source ouverte :
+Les CSV sont déjà versionnés (`data/ilots_lyon.csv` et `data/communes_lyon.csv`), l'app fonctionne sans rien télécharger. Pour les régénérer depuis la source ouverte :
 
 ```bash
 pip install requests
 python data/build_dataset.py
 ```
 
-Le script télécharge les 29 657 îlots via le service WFS de data.grandlyon.com, les classe par LCZ et les agrège par commune. `requests` n'est utilisé que par ce script (hors runtime de l'app).
+Le script télécharge les 29 657 îlots via le service WFS de data.grandlyon.com, les classe par LCZ, écrit le grain fin géolocalisé puis l'agrégat par commune. `requests` n'est utilisé que par ce script (hors runtime de l'app).
 
 ## 📁 Structure du projet
 
@@ -84,8 +81,9 @@ Le script télécharge les 29 657 îlots via le service WFS de data.grandlyon.co
 ├── model/
 │   └── naive_model.py          # Régression linéaire + validation croisée + résidus
 ├── data/
-│   ├── communes_lyon.csv       # Jeu agrégé (67 communes) — versionné
-│   ├── dataset.py              # Chargement du CSV + descriptions des variables
+│   ├── ilots_lyon.csv          # Grain fin : ~29 657 îlots géolocalisés — versionné
+│   ├── communes_lyon.csv       # Agrégat par commune (67 lignes) — versionné
+│   ├── dataset.py              # Chargement des CSV + descriptions des variables
 │   └── build_dataset.py        # Script de génération depuis l'open data (dev)
 ├── utils/
 │   └── viz.py                  # Graphiques Plotly (charte commune)

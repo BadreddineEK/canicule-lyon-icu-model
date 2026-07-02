@@ -1,22 +1,25 @@
 """
-App Streamlit — Îlot de chaleur urbain à Lyon (vraies données ouvertes).
-Ce qui explique la chaleur nocturne d'une commune, et pourquoi un beau R²
-peut cacher un modèle bien plus fragile qu'il n'en a l'air.
+App Streamlit — Chaleur nocturne à Lyon, au grain fin.
+
+Deux histoires en une :
+  1. Le vrai visage de l'îlot de chaleur urbain, îlot par îlot (~29 657 points réels).
+  2. Le piège de l'agrégation : en résumant chaque commune à un chiffre, on obtient
+     un R² flatteur… en jetant 99,8 % du signal.
+Données ouvertes : Métropole de Lyon, « Îlots de chaleur urbains » (GEOCLIMATE / LCZ).
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 
-from data.dataset import get_communes_data, get_feature_descriptions
+from data.dataset import get_communes_data, get_ilots_data
 from model.naive_model import train_naive_model, identify_outliers, get_model_formula, FEATURES
 from utils.viz import (
-    plot_top_communes,
-    plot_residuals,
-    plot_correlation_matrix,
-    plot_feature_importance,
-    plot_scatter_reel_vs_predit,
+    plot_ilots_map,
+    plot_commune_ilots,
     plot_heat_map,
+    plot_feature_importance,
+    plot_top_communes,
     plot_gauge,
 )
 
@@ -24,15 +27,14 @@ from utils.viz import (
 # CONFIG
 # ─────────────────────────────────────────
 st.set_page_config(
-    page_title="Chaleur urbaine à Lyon — vraies données",
+    page_title="Chaleur nocturne à Lyon — au grain fin",
     page_icon="🌡️",
     layout="wide",
 )
 
 
 def safe_plot(fig_func, *args, **kwargs):
-    """Affiche un graphique en isolant les erreurs : un souci sur un graphe
-    n'interrompt pas toute la page."""
+    """Affiche un graphique en isolant les erreurs, pour ne jamais casser la page."""
     try:
         st.plotly_chart(fig_func(*args, **kwargs), use_container_width=True)
     except Exception:
@@ -51,6 +53,11 @@ def get_active_theme() -> str:
 
 
 @st.cache_data(show_spinner=False)
+def load_ilots():
+    return get_ilots_data()
+
+
+@st.cache_data(show_spinner=False)
 def load_and_train():
     df = get_communes_data()
     model, scaler, results = train_naive_model(df)
@@ -58,11 +65,27 @@ def load_and_train():
     return df, model, scaler, results, df_out
 
 
+@st.cache_data(show_spinner=False)
+def aggregation_stats(df_ilots: pd.DataFrame):
+    """Chiffres qui illustrent la perte d'information due à l'agrégation."""
+    grp = df_ilots.groupby("commune")["expo_score"]
+    spans = grp.max() - grp.min()
+    n_full = int(((grp.min() <= -1) & (grp.max() >= 2)).sum())
+    return {
+        "n_ilots": len(df_ilots),
+        "span_median": float(spans.median()),
+        "n_full": n_full,
+        "n_communes": int(grp.ngroups),
+    }
+
+
 try:
+    df_ilots = load_ilots()
     df, model, scaler, results, df_out = load_and_train()
+    agg = aggregation_stats(df_ilots)
 except Exception:
     st.error(
-        "Impossible de charger les données ou d'entraîner le modèle. "
+        "Impossible de charger les données. "
         "Vérifiez l'installation des dépendances avec `pip install -r requirements.txt`."
     )
     st.stop()
@@ -72,10 +95,11 @@ theme = get_active_theme()
 # ─────────────────────────────────────────
 # HEADER
 # ─────────────────────────────────────────
-st.title("🌡️ Îlot de chaleur urbain à Lyon")
+st.title("🌡️ La nuit, Lyon ne refroidit pas partout pareil")
 st.subheader(
-    "Pendant la canicule, pourquoi certaines communes restent invivables la nuit "
-    "quand d'autres respirent ? J'ai creusé les vraies données de la Métropole."
+    "Pendant la dernière canicule, je me suis demandé pourquoi certains coins de Lyon restaient "
+    "étouffants la nuit quand d'autres respiraient. J'ai pris les vraies données de la Métropole, "
+    "îlot par îlot. Voici ce qu'elles montrent."
 )
 
 st.caption(
@@ -87,108 +111,137 @@ st.caption(
 st.divider()
 
 # ─────────────────────────────────────────
-# SECTION 0 : LE PHÉNOMÈNE, VU DU CIEL
+# SECTION 1 : LA CARTE, AU GRAIN FIN (le visuel qui claque)
 # ─────────────────────────────────────────
-st.markdown("## 🗺️ Le phénomène, vu du ciel")
+st.markdown("## 🗺️ Le vrai visage de l'îlot de chaleur")
 
 st.markdown(
-    "Chaque point est une commune ou un arrondissement. Plus il tire vers le rouge, plus il reste "
-    "chaud la nuit en été. La Presqu'île et Part-Dieu cuisent ; les Monts d'Or et les bords de Saône "
-    "gardent la fraîcheur. La logique se voit déjà : c'est une histoire de forme urbaine."
+    f"Chaque point est un **îlot réel** — {agg['n_ilots']:,} au total, sans rien lisser. ".replace(",", " ") +
+    "Rouge : la chaleur reste piégée la nuit. Bleu : ça se rafraîchit. La Presqu'île et la Part-Dieu "
+    "brûlent, les Monts d'Or et les bords de Saône soufflent. Le phénomène n'est pas flou : il se lit "
+    "rue par rue."
 )
 
-safe_plot(plot_heat_map, df, theme)
+safe_plot(plot_ilots_map, df_ilots, theme)
 
 st.caption(
-    "Données : « Îlots de chaleur urbains » de la Métropole de Lyon, calculées avec le logiciel "
-    "GEOCLIMATE (Local Climate Zones + exposition à la chaleur). 29 657 îlots réels agrégés en "
-    f"{len(df)} communes. Licence Ouverte Etalab."
+    "Source : « Îlots de chaleur urbains », Métropole de Lyon (data.grandlyon.com), calculés avec le "
+    "logiciel scientifique GEOCLIMATE — classification en Local Climate Zones et exposition à la "
+    "chaleur. Licence Ouverte Etalab. Zoome et survole : la donnée tient à l'échelle du pâté de maisons."
+)
+
+st.markdown(
+    "Ce que la carte dit tout de suite : **le bâti compact chauffe, la végétation et l'eau rafraîchissent**. "
+    "Rien d'ésotérique — les immeubles serrés stockent la chaleur du jour et la relâchent la nuit. "
+    "Mais regarde bien : même dans un arrondissement « chaud », il reste des poches bleues. "
+    "Cette granularité, c'est toute l'histoire de la suite."
 )
 
 st.divider()
 
 # ─────────────────────────────────────────
-# SECTION 1 : LES DONNÉES
+# SECTION 2 : LE PIÈGE DE L'AGRÉGATION
 # ─────────────────────────────────────────
-with st.expander(f"📂 Les données — {len(df)} communes de la Métropole de Lyon", expanded=False):
-    feat_desc = get_feature_descriptions()
-    st.markdown("**Variables :**")
-    for feat, desc in feat_desc.items():
-        st.markdown(f"- `{feat}` : {desc}")
-    st.dataframe(
-        df[["commune", "pct_vegetation", "pct_compact", "pct_mineral", "expo_nuit_score"]]
-        .set_index("commune"),
-        use_container_width=True,
+st.markdown("## 🪤 Le piège que je me suis tendu tout seul")
+
+st.markdown(
+    "Première réaction de data scientist : *« résumons chaque commune par un chiffre et modélisons ça »*. "
+    f"Je suis donc passé de **{agg['n_ilots']:,} îlots à {agg['n_communes']} communes**, ".replace(",", " ") +
+    "une moyenne par commune. Voici la même réalité, une fois moyennée :"
+)
+
+col_map, col_model = st.columns([3, 2])
+with col_map:
+    safe_plot(plot_heat_map, df, theme)
+with col_model:
+    st.markdown("#### Une régression bien propre")
+    m1, m2 = st.columns(2)
+    m1.metric("R² en apprentissage", f"{results.r2:.0%}")
+    m2.metric("R² validation croisée", f"{results.r2_cv:.0%}",
+              delta=f"{results.r2_cv - results.r2:+.0%}")
+    st.metric("Erreur moyenne (MAE)", f"{results.mae:.2f}")
+    st.info(f"`{get_model_formula(results.coefficients, results.intercept)}`", icon="📐")
+    st.markdown(
+        f"**{results.r2:.0%}** de variance expliquée. Sur le papier, on dirait la maîtrise. "
+        "Sauf que ce chiffre est un mirage."
     )
-    st.markdown("""
-**D'où viennent ces chiffres ?** Tout vient d'un seul jeu de données ouvert et officiel :
-la couche **« Îlots de chaleur urbains »** de [data.grandlyon.com](https://data.grandlyon.com),
-produite avec le logiciel scientifique **GEOCLIMATE** (méthode de l'Institut Paris Région).
 
-- Chaque îlot est classé en **Local Climate Zone (LCZ)** — la typologie internationale de forme
-  urbaine (bâti compact, bâti ouvert, végétation, eau, sol minéral…).
-- Chaque îlot reçoit une **exposition nocturne à la chaleur** (de « effet rafraîchissant » à « fort »).
-- J'ai agrégé les **29 657 îlots** par commune (pondéré par la surface) pour obtenir, d'un côté la
-  composition du sol, de l'autre un **score d'exposition** moyen — la cible du modèle.
-
-Ce sont donc de **vraies mesures d'aménagement**, pas des relevés de thermomètre : l'exposition est
-un indicateur calculé, à lire comme tel.
-""")
-
-# ─────────────────────────────────────────
-# SECTION 2 : CE QUI EXPLIQUE LA CHALEUR
-# ─────────────────────────────────────────
-st.markdown("## 🔍 Ce qui explique la chaleur")
-
-st.markdown(
-    "Question prise à l'endroit : qu'est-ce qui fait qu'une commune surchauffe la nuit ? "
-    "On confronte trois ingrédients de sa surface — la végétation, le bâti compact et le sol "
-    "minéral — au score d'exposition."
+st.warning(
+    f"**En moyennant, j'ai jeté {100 * (1 - agg['n_communes'] / agg['n_ilots']):.1f} % des mesures.** "
+    f"Sur {agg['n_ilots']:,} îlots, il n'en reste que {agg['n_communes']} points. ".replace(",", " ") +
+    "Un R² de 87 % sur 67 points, c'est facile à décrocher — et la validation croisée le confirme : "
+    f"testé sur des communes jamais vues, le modèle tombe à **{results.r2_cv:.0%}**, très instable "
+    f"(de {min(results.cv_scores):.0%} à {max(results.cv_scores):.0%} selon le découpage).",
+    icon="⚠️",
 )
 
-col_a, col_b = st.columns(2)
-with col_a:
+st.markdown(
+    f"Pire : la moyenne **efface le contraste interne**. Sur ces {agg['n_communes']} communes, "
+    f"**{agg['n_full']}** contiennent à la fois des îlots rafraîchissants et des îlots fortement "
+    "exposés. Les résumer par un seul nombre, c'est mélanger un parc et une dalle de béton dans la "
+    "même case. La preuve, en zoomant sur une seule commune :"
+)
+
+# ─────────────────────────────────────────
+# SECTION 2bis : EXPLORATEUR (preuve du contraste interne)
+# ─────────────────────────────────────────
+communes_tries = df.sort_values("expo_nuit_score", ascending=False)["commune"].tolist()
+default_idx = communes_tries.index("Lyon 7e Arrondissement") if "Lyon 7e Arrondissement" in communes_tries else 0
+choix = st.selectbox("🔎 Choisis une commune et regarde ses îlots", communes_tries, index=default_idx)
+
+d_com = df_ilots[df_ilots["commune"] == choix]
+row = df[df["commune"] == choix].iloc[0]
+
+col_cmap, col_cstat = st.columns([3, 2])
+with col_cmap:
+    safe_plot(plot_commune_ilots, df_ilots, choix, theme)
+with col_cstat:
+    st.markdown(f"#### {choix}")
+    st.metric("Moyenne (le chiffre agrégé)", f"{row['expo_nuit_score']:+.2f}")
+    s1, s2 = st.columns(2)
+    s1.metric("Îlot le plus frais", f"{d_com['expo_score'].min():+.0f}")
+    s2.metric("Îlot le plus chaud", f"{d_com['expo_score'].max():+.0f}")
+    st.metric("Nombre d'îlots", f"{len(d_com)}")
+    ecart = d_com["expo_score"].max() - d_com["expo_score"].min()
+    if ecart >= 2:
+        st.markdown(
+            "👉 À l'intérieur de cette seule commune, l'écart va **du rafraîchissant au fortement "
+            "exposé**. La moyenne ne le raconte pas."
+        )
+    else:
+        st.markdown("👉 Ici, les îlots sont plus homogènes — la moyenne est moins trompeuse.")
+
+st.divider()
+
+# ─────────────────────────────────────────
+# SECTION 3 : CE QUE LA MOYENNE LAISSE QUAND MÊME VOIR
+# ─────────────────────────────────────────
+st.markdown("## 🔍 La tendance de fond, elle, reste solide")
+
+st.markdown(
+    "L'agrégation ment sur la précision, pas sur le sens. À l'échelle des communes, la relation "
+    "**bâti compact → chaleur** ressort nettement. C'est cohérent avec la physique de la ville, "
+    "et c'est le seul enseignement que je me permets d'en tirer."
+)
+
+col_imp, col_scatter = st.columns(2)
+with col_imp:
     safe_plot(plot_feature_importance, results.coefficients, theme)
-with col_b:
-    safe_plot(plot_correlation_matrix, df, theme)
+with col_scatter:
+    safe_plot(plot_top_communes, df, 15, theme)
 
-st.markdown(
-    "Le verdict est net et cohérent avec la physique : **le bâti compact est le moteur numéro un** "
-    "de la chaleur nocturne (les immeubles serrés stockent la chaleur du jour et la relâchent la nuit). "
-    "La végétation, elle, tire vers le frais. Rien de révolutionnaire — et c'est justement bon signe : "
-    "le modèle retrouve ce que dit la science."
+st.caption(
+    "Note d'honnêteté : la cible (l'exposition) est elle-même calculée par GEOCLIMATE à partir de la "
+    "forme urbaine. La relation « bâti compact → chaleur » est donc en partie encodée dans la donnée : "
+    "je la visualise, je ne la « découvre » pas. C'est un travail de lecture de données, pas une preuve causale."
 )
 
 # ─────────────────────────────────────────
-# SECTION 3 : LE MODÈLE (ET SON PIÈGE)
+# SECTION 3bis : SIMULATEUR
 # ─────────────────────────────────────────
-st.markdown("## 🧮 Le modèle, et son piège")
-
-c1, c2, c3 = st.columns(3)
-c1.metric("R² en apprentissage", f"{results.r2:.0%}",
-          help="Sur les données qui ont servi à l'entraîner")
-c2.metric("R² en validation croisée", f"{results.r2_cv:.0%}",
-          delta=f"{results.r2_cv - results.r2:+.0%}",
-          help="Sur des communes que le modèle n'a pas vues à l'entraînement")
-c3.metric("Erreur moyenne (MAE)", f"{results.mae:.2f}", help="Erreur absolue moyenne, en points de score")
-
-st.info(f"**Formule** : `{get_model_formula(results.coefficients, results.intercept)}`", icon="📐")
-
+st.markdown("### 🎮 La relation, en un curseur")
 st.markdown(
-    f"C'est là que ça devient intéressant. En apprentissage, le modèle affiche **{results.r2:.0%}** : "
-    f"superbe. Mais testé sur des communes qu'il n'a jamais vues, il tombe à **{results.r2_cv:.0%}** en "
-    f"moyenne — avec des écarts énormes d'un découpage à l'autre "
-    f"(de {min(results.cv_scores):.0%} à {max(results.cv_scores):.0%}). "
-    "Sur 67 communes seulement, le premier chiffre flatte, le second dit la vérité : la vraie capacité "
-    "à généraliser est plus modeste et surtout instable."
-)
-
-# ─────────────────────────────────────────
-# SECTION 3bis : SIMULATEUR (interactif)
-# ─────────────────────────────────────────
-st.markdown("### 🎮 À toi de jouer : compose une commune")
-st.markdown(
-    "Fais varier la composition du sol et regarde le modèle recalculer l'exposition nocturne en direct."
+    "Fais varier la composition d'une commune fictive et regarde le score que la donnée lui associerait."
 )
 
 sim_left, sim_right = st.columns([1, 1])
@@ -203,101 +256,49 @@ pred_sim = float(model.predict(scaler.transform(X_sim))[0])
 with sim_right:
     safe_plot(plot_gauge, pred_sim, theme)
 
-plus_exposees = int((df["expo_nuit_score"] < pred_sim).sum())
+plus_chaudes = int((df["expo_nuit_score"] < pred_sim).sum())
 st.markdown(
-    f"Avec ces réglages, le modèle prédit un score de **{pred_sim:+.2f}**. Cette commune fictive serait "
-    f"plus exposée à la chaleur nocturne que **{plus_exposees} des {len(df)}** communes réelles."
+    f"Score associé : **{pred_sim:+.2f}**. Une telle commune serait plus exposée la nuit que "
+    f"**{plus_chaudes} des {len(df)}** communes réelles."
 )
 
 st.divider()
 
 # ─────────────────────────────────────────
-# SECTION 4 : RÉEL VS PRÉDIT
-# ─────────────────────────────────────────
-st.markdown("## 🔬 Réel vs prédit, commune par commune")
-
-st.markdown(
-    "Chaque point est une commune : plus elle est proche de la diagonale, mieux elle est prédite. "
-    "La tendance est bonne, mais quelques communes s'écartent nettement — les plus instructives."
-)
-
-col_c, col_d = st.columns(2)
-with col_c:
-    safe_plot(plot_scatter_reel_vs_predit, df, results.predictions, theme)
-with col_d:
-    safe_plot(plot_top_communes, df, 15, theme)
-
-# Explorateur de commune
-st.markdown("### 🔎 Explore une commune")
-choix = st.selectbox("Commune", df_out["commune"].tolist(), label_visibility="collapsed")
-row = df_out[df_out["commune"] == choix].iloc[0]
-predit = row["expo_nuit_score"] - row["residual"]
-
-m1, m2, m3 = st.columns(3)
-m1.metric("Exposition réelle", f"{row['expo_nuit_score']:+.2f}")
-m2.metric("Exposition prédite", f"{predit:+.2f}")
-m3.metric("Écart du modèle", f"{row['residual']:+.2f}",
-          help="Positif = le modèle sous-estime la chaleur ; négatif = il la surestime")
-
-f1, f2, f3 = st.columns(3)
-f1.metric("🌿 Végétation", f"{row['pct_vegetation']:.0f} %")
-f2.metric("🏙️ Bâti compact", f"{row['pct_compact']:.0f} %")
-f3.metric("🪨 Sol minéral", f"{row['pct_mineral']:.0f} %")
-
-if row["is_outlier"]:
-    st.warning(f"⚠️ {choix} fait partie des communes que le modèle prédit mal.")
-else:
-    st.success(f"✅ Sur {choix}, le modèle tombe assez juste.")
-
-# ─────────────────────────────────────────
-# SECTION 5 : OÙ LE MODÈLE SE TROMPE
-# ─────────────────────────────────────────
-st.markdown("## 🔴 Là où le modèle se trompe")
-
-safe_plot(plot_residuals, df_out, 12, theme)
-
-st.caption(
-    "Ces écarts ne sont pas des bugs : ils rappellent que trois pourcentages de surface ne suffisent "
-    "pas à tout expliquer. L'orientation des rues, les matériaux, la proximité de l'eau ou l'activité "
-    "humaine jouent aussi — et n'entrent pas dans le modèle."
-)
-
-st.divider()
-
-# ─────────────────────────────────────────
-# SECTION 6 : LA LEÇON
+# SECTION 4 : LA LEÇON
 # ─────────────────────────────────────────
 st.markdown("## 💡 Ce que je retiens")
 
+n_ilots_fmt = f"{agg['n_ilots']:,}".replace(",", " ")
 st.markdown(f"""
-Deux enseignements, un technique et un métier :
+1. **Sur la ville** : à Lyon, la nuit de canicule ne se joue pas à l'échelle du quartier mais du
+   pâté de maisons. Densifier sans végétaliser fabrique des poches invivables — et il en existe
+   jusque dans les communes réputées « fraîches ».
 
-1. **Sur la chaleur urbaine** : à Lyon, la forme du bâti explique l'essentiel de l'exposition nocturne.
-   Densifier sans végétaliser, c'est fabriquer des nuits chaudes. La donnée le montre noir sur blanc.
-
-2. **Sur la data** : un R² de **{results.r2:.0%}** ne veut rien dire tout seul. La validation croisée
-   le ramène à **{results.r2_cv:.0%}**, très instable sur 67 communes. Le vrai travail n'est pas
-   d'obtenir un beau chiffre, c'est de savoir à quel point lui faire confiance.
+2. **Sur la data** : mon plus beau chiffre, **{results.r2:.0%}**, était le plus trompeur. Il venait
+   d'avoir agrégé {n_ilots_fmt} mesures en {agg['n_communes']} points. La validation croisée
+   ({results.r2_cv:.0%}, instable) et le grain fin l'ont démasqué. Un bon résultat n'est pas un grand
+   R², c'est un chiffre dont on connaît les limites.
 """)
 
 col_e, col_f, col_g = st.columns(3)
 with col_e:
     st.markdown(
-        "#### 📏 Petit échantillon\n"
-        "67 communes, c'est peu. Sur si peu de points, un modèle mémorise vite ses données et "
-        "surestime sa vraie performance."
+        "#### 📏 Le grain compte\n"
+        "La bonne échelle d'analyse n'est pas la plus pratique, c'est celle où vit le phénomène. "
+        "Ici, l'îlot, pas la commune."
     )
 with col_f:
     st.markdown(
-        "#### 🧩 Analyse agrégée\n"
-        "Travailler par commune lisse les contrastes internes : un parc et une dalle béton peuvent "
-        "se retrouver dans la même moyenne."
+        "#### 🪤 Méfiance du beau R²\n"
+        "Agréger gonfle mécaniquement les corrélations. Un chiffre flatteur mérite toujours qu'on "
+        "cherche ce qu'il cache."
     )
 with col_g:
     st.markdown(
-        "#### 🛰️ Une cible calculée\n"
-        "L'exposition vient d'un modèle (GEOCLIMATE), pas d'un thermomètre. On modélise donc un "
-        "indicateur, à ne pas confondre avec une mesure de terrain."
+        "#### 🛰️ Savoir d'où vient la donnée\n"
+        "L'exposition est un indicateur calculé par GEOCLIMATE, pas un thermomètre. Je le lis pour "
+        "ce qu'il est, sans surinterpréter."
     )
 
 st.divider()
@@ -310,7 +311,7 @@ with cta_left:
     st.markdown("""
 ### 👋 On continue ailleurs ?
 Je suis **Badreddine**, ingénieur en mathématiques appliquées à Lyon. Je construis des outils data,
-des dashboards et des modèles, et je partage ce que j'apprends au passage.
+des dashboards et des analyses, et je partage ma manière de raisonner au passage.
 """)
 with cta_right:
     st.markdown(
@@ -321,7 +322,7 @@ with cta_right:
 
 st.divider()
 st.caption(
-    "🌡️ Projet pédagogique — Données : Métropole de Lyon, « Îlots de chaleur urbains » "
-    "(GEOCLIMATE), Licence Ouverte Etalab · "
+    "🌡️ Projet d'analyse — Données : Métropole de Lyon, « Îlots de chaleur urbains » (GEOCLIMATE / LCZ), "
+    "Licence Ouverte Etalab · "
     "Code : [github.com/BadreddineEK/canicule-lyon-icu-model](https://github.com/BadreddineEK/canicule-lyon-icu-model)"
 )

@@ -14,11 +14,20 @@ from pathlib import Path
 import pandas as pd
 
 _CSV = Path(__file__).with_name("communes_lyon.csv")
+_CSV_ILOTS = Path(__file__).with_name("ilots_lyon.csv")
 
 
 def get_communes_data() -> pd.DataFrame:
     """Retourne le DataFrame des communes de la Métropole de Lyon."""
     return pd.read_csv(_CSV, encoding="utf-8")
+
+
+def get_ilots_data() -> pd.DataFrame:
+    """Retourne les ~29 657 îlots géolocalisés (grain fin).
+
+    Colonnes : commune, lcz_groupe, expo_score, surface, lat, lon.
+    """
+    return pd.read_csv(_CSV_ILOTS, encoding="utf-8")
 
 
 def get_feature_descriptions() -> dict:

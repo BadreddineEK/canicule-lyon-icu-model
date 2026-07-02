@@ -227,6 +227,96 @@ def plot_heat_map(df: pd.DataFrame, theme: str = "light") -> go.Figure:
     return fig
 
 
+def _ilot_sizes(surface: pd.Series, lo: float, hi: float) -> np.ndarray:
+    """Taille des marqueurs proportionnelle à la racine de la surface (bornée)."""
+    return np.clip(np.sqrt(surface.clip(lower=1)) / 18.0, lo, hi)
+
+
+@st.cache_data(show_spinner=False)
+def plot_ilots_map(df_ilots: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Carte au grain fin : un point par îlot (~29 000), coloré par la chaleur nocturne.
+    C'est le vrai visage du phénomène, avant toute agrégation."""
+    p = _palette(theme)
+    map_style = "carto-positron" if theme == "light" else "carto-darkmatter"
+
+    fig = go.Figure(go.Scattermapbox(
+        lat=df_ilots["lat"],
+        lon=df_ilots["lon"],
+        mode="markers",
+        marker=dict(
+            size=_ilot_sizes(df_ilots["surface"], 3, 12),
+            color=df_ilots["expo_score"],
+            colorscale="RdYlBu_r",
+            cmin=-1, cmax=2, cmid=0,
+            colorbar=dict(
+                title="Chaleur<br>nocturne",
+                tickvals=[-1, 0, 1, 2],
+                ticktext=["Rafraîch.", "Faible", "Moyen", "Fort"],
+            ),
+            opacity=0.72,
+        ),
+        text=df_ilots["commune"],
+        customdata=df_ilots[["lcz_groupe", "expo_score"]],
+        hovertemplate="<b>%{text}</b><br>%{customdata[0]}<br>Chaleur nocturne : %{customdata[1]:+.0f}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=f"Chaleur nocturne à Lyon — {len(df_ilots):,} îlots réels".replace(",", " "),
+        mapbox=dict(style=map_style, center=dict(lat=45.752, lon=4.85), zoom=10.3),
+        height=620,
+        margin=dict(l=10, r=10, t=70, b=10),
+        paper_bgcolor=p["bg"],
+        font=dict(color=p["font"], size=13),
+        title_font=dict(size=17),
+        hoverlabel=dict(font_size=13),
+    )
+    return fig
+
+
+@st.cache_data(show_spinner=False)
+def plot_commune_ilots(df_ilots: pd.DataFrame, commune: str, theme: str = "light") -> go.Figure:
+    """Zoom sur les îlots d'une seule commune : on voit le contraste interne
+    (un parc frais à côté d'un cœur dense brûlant) que la moyenne efface."""
+    p = _palette(theme)
+    map_style = "carto-positron" if theme == "light" else "carto-darkmatter"
+    d = df_ilots[df_ilots["commune"] == commune]
+
+    fig = go.Figure(go.Scattermapbox(
+        lat=d["lat"],
+        lon=d["lon"],
+        mode="markers",
+        marker=dict(
+            size=_ilot_sizes(d["surface"], 6, 22),
+            color=d["expo_score"],
+            colorscale="RdYlBu_r",
+            cmin=-1, cmax=2, cmid=0,
+            colorbar=dict(
+                title="Chaleur<br>nocturne",
+                tickvals=[-1, 0, 1, 2],
+                ticktext=["Rafraîch.", "Faible", "Moyen", "Fort"],
+            ),
+            opacity=0.85,
+        ),
+        text=d["lcz_groupe"],
+        customdata=d["expo_score"],
+        hovertemplate="<b>%{text}</b><br>Chaleur nocturne : %{customdata:+.0f}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=f"{commune} — {len(d)} îlots, du plus frais au plus chaud",
+        mapbox=dict(
+            style=map_style,
+            center=dict(lat=float(d["lat"].mean()), lon=float(d["lon"].mean())),
+            zoom=12.3,
+        ),
+        height=520,
+        margin=dict(l=10, r=10, t=70, b=10),
+        paper_bgcolor=p["bg"],
+        font=dict(color=p["font"], size=13),
+        title_font=dict(size=16),
+        hoverlabel=dict(font_size=13),
+    )
+    return fig
+
+
 def plot_gauge(value: float, theme: str = "light", vmin: float = -1.0, vmax: float = 2.0) -> go.Figure:
     """Jauge affichant un score d'exposition nocturne prédit."""
     p = _palette(theme)

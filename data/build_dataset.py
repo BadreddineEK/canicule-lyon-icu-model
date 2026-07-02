@@ -5,10 +5,10 @@ Source : « Îlots de chaleur urbains » (data.grandlyon.com), calculé avec le 
 GEOCLIMATE (classification Local Climate Zone + exposition à la chaleur), Licence Ouverte Etalab.
 
 Chaque îlot porte une Local Climate Zone (LCZ) et une exposition nocturne à la chaleur.
-On agrège par commune / arrondissement (pondéré par la surface) pour obtenir :
-  - la composition du sol (végétation, bâti compact, minéral)
-  - un score continu d'exposition nocturne à la chaleur (la cible à expliquer)
-Sortie : data/communes_lyon.csv
+Deux sorties :
+  - data/ilots_lyon.csv    : le grain fin, un point par îlot (~29 000 lignes)
+  - data/communes_lyon.csv : l'agrégat par commune (67 lignes) — utile pour montrer
+                             le piège de l'agrégation
 """
 
 import requests
@@ -33,6 +33,21 @@ EAU = {"LCZ G"}                                       # eau
 MINERAL = {"LCZ E"}                                   # roche nue, pavés, macadam
 COMPACT = {"LCZ 1", "LCZ 2", "LCZ 3"}                 # bâti compact (haut/moyen/bas)
 BATI = {f"LCZ {i}" for i in range(1, 11)}             # tout le bâti (LCZ 1 à 10)
+
+
+def group_label(lcz):
+    """Étiquette lisible du type de sol pour la carte et la légende."""
+    if lcz in VEGETATION:
+        return "Végétation"
+    if lcz in EAU:
+        return "Eau"
+    if lcz in MINERAL:
+        return "Minéral"
+    if lcz in COMPACT:
+        return "Bâti compact"
+    if lcz in BATI:
+        return "Bâti diffus"
+    return "Autre"
 
 
 def fetch_all():
@@ -84,6 +99,7 @@ def build():
             "insee": p.get("insee"),
             "surface": surf,
             "lcz": lcz,
+            "lcz_groupe": group_label(lcz),
             "expo_score": EXPO_SCORE[expo],
             "is_vegetation": lcz in VEGETATION,
             "is_eau": lcz in EAU,
@@ -96,6 +112,15 @@ def build():
 
     df = pd.DataFrame(rows)
     print("îlots exploités :", len(df))
+
+    # ── Sortie 1 : le grain fin (un point par îlot, avec sa position) ──
+    ilots = df.dropna(subset=["lat", "lon"]).copy()
+    ilots = ilots[["commune", "lcz_groupe", "expo_score", "surface", "lat", "lon"]]
+    ilots["lat"] = ilots["lat"].round(5)
+    ilots["lon"] = ilots["lon"].round(5)
+    ilots["surface"] = ilots["surface"].round(0).astype(int)
+    ilots.to_csv("data/ilots_lyon.csv", index=False, encoding="utf-8")
+    print("îlots géolocalisés écrits :", len(ilots))
 
     def agg(g):
         s = g["surface"].sum()
