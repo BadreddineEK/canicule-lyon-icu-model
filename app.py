@@ -18,7 +18,7 @@ from utils.viz import (
     plot_ilots_map,
     plot_commune_ilots,
     plot_heat_map,
-    plot_feature_importance,
+    plot_expo_by_lcz,
     plot_top_communes,
     plot_gauge,
 )
@@ -91,6 +91,7 @@ except Exception:
     st.stop()
 
 theme = get_active_theme()
+n_ilots_fmt = f"{agg['n_ilots']:,}".replace(",", " ")
 
 # ─────────────────────────────────────────
 # HEADER
@@ -116,7 +117,7 @@ st.divider()
 st.markdown("## 🗺️ Le vrai visage de l'îlot de chaleur")
 
 st.markdown(
-    f"Chaque point est un **îlot réel** — {agg['n_ilots']:,} au total, sans rien lisser. ".replace(",", " ") +
+    f"Chaque point est un **îlot réel** — {n_ilots_fmt} au total, sans rien lisser. "
     "Rouge : la chaleur reste piégée la nuit. Bleu : ça se rafraîchit. La Presqu'île et la Part-Dieu "
     "brûlent, les Monts d'Or et les bords de Saône soufflent. Le phénomène n'est pas flou : il se lit "
     "rue par rue."
@@ -146,7 +147,7 @@ st.markdown("## 🪤 Le piège que je me suis tendu tout seul")
 
 st.markdown(
     "Première réaction de data scientist : *« résumons chaque commune par un chiffre et modélisons ça »*. "
-    f"Je suis donc passé de **{agg['n_ilots']:,} îlots à {agg['n_communes']} communes**, ".replace(",", " ") +
+    f"Je suis donc passé de **{n_ilots_fmt} îlots à {agg['n_communes']} communes**, "
     "une moyenne par commune. Voici la même réalité, une fois moyennée :"
 )
 
@@ -167,8 +168,7 @@ with col_model:
     )
 
 st.warning(
-    f"**En moyennant, j'ai jeté {100 * (1 - agg['n_communes'] / agg['n_ilots']):.1f} % des mesures.** "
-    f"Sur {agg['n_ilots']:,} îlots, il n'en reste que {agg['n_communes']} points. ".replace(",", " ") +
+    f"**En moyennant, je résume {n_ilots_fmt} îlots à seulement {agg['n_communes']} points.** "
     "Un R² de 87 % sur 67 points, c'est facile à décrocher — et la validation croisée le confirme : "
     f"testé sur des communes jamais vues, le modèle tombe à **{results.r2_cv:.0%}**, très instable "
     f"(de {min(results.cv_scores):.0%} à {max(results.cv_scores):.0%} selon le découpage).",
@@ -176,10 +176,11 @@ st.warning(
 )
 
 st.markdown(
-    f"Pire : la moyenne **efface le contraste interne**. Sur ces {agg['n_communes']} communes, "
-    f"**{agg['n_full']}** contiennent à la fois des îlots rafraîchissants et des îlots fortement "
-    "exposés. Les résumer par un seul nombre, c'est mélanger un parc et une dalle de béton dans la "
-    "même case. La preuve, en zoomant sur une seule commune :"
+    f"Pire : la moyenne **efface le contraste interne**. La commune médiane s'étale sur **toute "
+    f"l'échelle** (écart de {agg['span_median']:.0f} points, du plus frais au plus chaud), et "
+    f"**{agg['n_full']} des {agg['n_communes']}** communes contiennent à la fois des îlots "
+    "rafraîchissants et des îlots fortement exposés. Les résumer par un seul nombre, c'est mélanger "
+    "un parc et une dalle de béton dans la même case. La preuve, en zoomant sur une seule commune :"
 )
 
 # ─────────────────────────────────────────
@@ -216,18 +217,19 @@ st.divider()
 # ─────────────────────────────────────────
 # SECTION 3 : CE QUE LA MOYENNE LAISSE QUAND MÊME VOIR
 # ─────────────────────────────────────────
-st.markdown("## 🔍 La tendance de fond, elle, reste solide")
+st.markdown("## 🔍 La tendance de fond, au grain fin cette fois")
 
 st.markdown(
-    "L'agrégation ment sur la précision, pas sur le sens. À l'échelle des communes, la relation "
-    "**bâti compact → chaleur** ressort nettement. C'est cohérent avec la physique de la ville, "
-    "et c'est le seul enseignement que je me permets d'en tirer."
+    "L'agrégation gonfle la précision, pas le sens. En revenant aux îlots — sans rien moyenner — la "
+    "relation reste nette : le bâti compact chauffe, la végétation et l'eau rafraîchissent. Mais "
+    "mesurée honnêtement, îlot par îlot, la corrélation est **modérée (r ≈ 0,59)** — loin des 87 % "
+    "que l'agrégation laissait croire. La vraie force du lien, la voici :"
 )
 
-col_imp, col_scatter = st.columns(2)
-with col_imp:
-    safe_plot(plot_feature_importance, results.coefficients, theme)
-with col_scatter:
+col_lcz, col_top = st.columns(2)
+with col_lcz:
+    safe_plot(plot_expo_by_lcz, df_ilots, theme)
+with col_top:
     safe_plot(plot_top_communes, df, 15, theme)
 
 st.caption(
@@ -269,7 +271,6 @@ st.divider()
 # ─────────────────────────────────────────
 st.markdown("## 💡 Ce que je retiens")
 
-n_ilots_fmt = f"{agg['n_ilots']:,}".replace(",", " ")
 st.markdown(f"""
 1. **Sur la ville** : à Lyon, la nuit de canicule ne se joue pas à l'échelle du quartier mais du
    pâté de maisons. Densifier sans végétaliser fabrique des poches invivables — et il en existe

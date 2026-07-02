@@ -317,6 +317,36 @@ def plot_commune_ilots(df_ilots: pd.DataFrame, commune: str, theme: str = "light
     return fig
 
 
+@st.cache_data(show_spinner=False)
+def plot_expo_by_lcz(df_ilots: pd.DataFrame, theme: str = "light") -> go.Figure:
+    """Exposition nocturne moyenne par type de sol, calculée directement sur les
+    îlots (aucune agrégation communale). La relation, à l'échelle honnête."""
+    p = _palette(theme)
+    order = ["Bâti compact", "Bâti diffus", "Minéral", "Végétation", "Eau"]
+    g = df_ilots[df_ilots["lcz_groupe"].isin(order)].groupby("lcz_groupe")["expo_score"]
+    stats = g.agg(["mean", "count"]).reindex(order).dropna()
+    stats = stats.sort_values("mean")
+
+    fig = go.Figure(go.Bar(
+        x=stats["mean"],
+        y=stats.index,
+        orientation="h",
+        marker=dict(
+            color=stats["mean"], colorscale="RdYlBu_r", cmin=-1, cmax=2, cmid=0,
+        ),
+        text=[f"{v:+.2f}  ({int(n):,} îlots)".replace(",", " ")
+              for v, n in zip(stats["mean"], stats["count"])],
+        textposition="outside",
+    ))
+    fig.add_vline(x=0, line_dash="dot", line_color=p["ref"], opacity=0.6)
+    fig.update_layout(
+        title="Chaleur nocturne moyenne par type de sol (au grain fin)",
+        xaxis_title="Score d'exposition nocturne (−1 rafraîchissant → +2 fort)",
+        xaxis=dict(range=[-1.2, 2.3]),
+    )
+    return _apply_theme(fig, height=340, theme=theme)
+
+
 def plot_gauge(value: float, theme: str = "light", vmin: float = -1.0, vmax: float = 2.0) -> go.Figure:
     """Jauge affichant un score d'exposition nocturne prédit."""
     p = _palette(theme)
