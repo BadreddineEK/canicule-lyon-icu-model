@@ -35,6 +35,14 @@ def safe_plot(fig_func, *args, **kwargs):
     except Exception:
         st.warning("Ce graphique n'a pas pu être généré. Le reste de l'analyse reste disponible.")
 
+
+def get_active_theme() -> str:
+    """Renvoie le thème actif ('light' ou 'dark') pour adapter les graphiques."""
+    try:
+        return getattr(st.context.theme, "type", None) or "dark"
+    except Exception:
+        return "dark"
+
 # ─────────────────────────────────────
 # LOAD DATA & TRAIN MODEL
 # ─────────────────────────────────────
@@ -55,17 +63,29 @@ except Exception:
     )
     st.stop()
 
-# ─────────────────────────────────────────
+theme = get_active_theme()
+
+# ─────────────────────────────────────
 # HEADER
-# ─────────────────────────────────────────
-st.title("🌡️ Îlot de Chaleur Urbain à Lyon")
-st.subheader("J'ai essayé de prédire les zones les plus chaudes. Mon modèle s'est trompé — voici pourquoi.")
+# ─────────────────────────────────────
+st.title("🌡️ Îlot de chaleur urbain à Lyon")
+st.subheader(
+    f"Mon modèle simple explique {results.r2:.0%} des écarts de température entre quartiers. "
+    "Et c'est justement pour ça qu'il faut s'en méfier."
+)
 
 st.markdown("""
-> **Contexte** : Pendant la canicule de juin 2026, l'écart de température entre la Presqu'île et Caluire pouvait 
-> dépasser **4°C la nuit**. J'ai voulu reproduire ça avec un modèle simple. 
-> Ce dashboard montre les résultats... et leurs limites.
+> **Le pitch** : la nuit, en pleine canicule, le centre de Lyon peut rester plusieurs degrés
+> plus chaud que la campagne autour — c'est l'îlot de chaleur urbain. J'ai voulu voir jusqu'où
+> une régression linéaire toute simple, sur 3 variables, pouvait reproduire ce phénomène.
+> Un score flatteur, quelques ratés révélateurs, et une bonne leçon sur ce qu'un « bon » chiffre cache.
 """)
+
+st.caption(
+    "Par [Badreddine EL KHAMLICHI](https://badreddineek.com) · ingénieur en mathématiques appliquées, Lyon · "
+    "[Portfolio](https://portfolio.badreddineek.com) · "
+    "[Code source](https://github.com/BadreddineEK/canicule-lyon-icu-model)"
+)
 
 st.divider()
 
@@ -117,9 +137,9 @@ st.caption(
 
 col_a, col_b = st.columns(2)
 with col_a:
-    safe_plot(plot_feature_importance, results.coefficients)
+    safe_plot(plot_feature_importance, results.coefficients, theme)
 with col_b:
-    safe_plot(plot_correlation_matrix, df)
+    safe_plot(plot_correlation_matrix, df, theme)
 
 # ─────────────────────────────────────────
 # SECTION 3 : LA CONFRONTATION
@@ -127,8 +147,9 @@ with col_b:
 st.markdown("## 🔬 La confrontation : réel vs prédit")
 
 st.markdown("""
-Le modèle prédit plutôt bien les cas extrêmes (centre-ville chaud, périphérie rurale fraîche).
-Mais il se plante sur plusieurs quartiers intermédiaires — et c'est là que ça devient intéressant.
+Le modèle suit bien la tendance générale : centre dense et chaud, périphérie végétalisée et fraîche.
+Mais un chiffre global lisse toujours les détails. En regardant quartier par quartier, un cas sort
+nettement du lot — et c'est le plus instructif.
 """)
 
 st.caption(
@@ -136,13 +157,13 @@ st.caption(
     "positif = le modèle a sous-estimé la chaleur, négatif = il l'a surestimée."
 )
 
-safe_plot(plot_reel_vs_predit, df, results.predictions)
+safe_plot(plot_reel_vs_predit, df, results.predictions, theme)
 
 col_c, col_d = st.columns(2)
 with col_c:
-    safe_plot(plot_scatter_reel_vs_predit, df, results.predictions)
+    safe_plot(plot_scatter_reel_vs_predit, df, results.predictions, theme)
 with col_d:
-    safe_plot(plot_residuals, df_out)
+    safe_plot(plot_residuals, df_out, theme)
 
 # ─────────────────────────────────────────
 # SECTION 4 : LES CAS PROBLÉMATIQUES
@@ -160,7 +181,11 @@ if len(outliers) > 0:
         )
 else:
     st.success("Le modèle prédit tous les quartiers avec moins de 0.8°C d'erreur.")
-
+st.caption(
+    "Gerland est un ancien quartier industriel devenu pôle biotech, avec halles, laboratoires "
+    "et grand stade. La chaleur y vient probablement aussi de l'activité et des matériaux, "
+    "que la végétation, la densité et la distance au centre ne captent pas."
+)
 # ─────────────────────────────────────────# SECTION : LIMITES & HONNÊTETÉ SUR LES DONNÉES
 # ─────────────────────────────────────
 st.markdown("## ⚠️ Limites de ce modèle (à lire avant de commenter)")
@@ -184,30 +209,33 @@ st.divider()
 st.markdown("## 💡 Pourquoi le modèle simple ne suffit pas")
 
 st.markdown(f"""
-Le modèle naïf explique **{results.r2:.0%} de la variance thermique** entre quartiers. 
-Pas mal pour 3 variables. Mais les {(1 - results.r2):.0%} restants dépendent de phénomènes 
-qu'aucun fichier CSV classique ne capture :
+**{results.r2:.0%} de variance expliquée avec 3 variables, ça impressionne.** Mais sur seulement
+14 quartiers, ce chiffre est plus une alerte qu'un trophée : quelques points bien alignés suffisent
+à le gonfler. Et les {(1 - results.r2):.0%} qui manquent dépendent de phénomènes qu'aucune colonne
+simple ne capture :
 """)
 
 col_e, col_f, col_g = st.columns(3)
 with col_e:
-    st.markdown("""#### 🌬️ Flux nocturnes
-    La nuit, la chaleur emmagasinée dans les matériaux (bitume, béton) 
-    est relâchée différemment selon l'**albédo** des surfaces. 
-    Deux rues avec la même densité peuvent avoir des températures nocturnes très différentes.
-    """)
+    st.markdown(
+        "#### 🌬️ Flux nocturnes\n"
+        "La nuit, la chaleur stockée le jour dans le bitume et le béton se libère à un rythme "
+        "qui dépend de l'**albédo** (la part de lumière qu'une surface renvoie). "
+        "Deux rues aussi denses peuvent ne pas refroidir à la même vitesse."
+    )
 with col_f:
-    st.markdown("""#### 🏙️ Morphologie urbaine
-    L'**orientation des rues**, la hauteur des bâtiments et le ratio H/W (hauteur/largeur de rue) 
-    créent des « canyons urbains » qui emprisonnent la chaleur indépendamment de la végétation ou de la densité.
-    """)
+    st.markdown(
+        "#### 🏙️ Morphologie urbaine\n"
+        "L'**orientation des rues** et le rapport hauteur/largeur des bâtiments forment des "
+        "« canyons urbains » qui piègent la chaleur, indépendamment de la végétation ou de la densité."
+    )
 with col_g:
-    st.markdown("""#### 💧 Présence d'eau
-    La proximité de la Saône ou du Rhône crée des corridors de fraîcheur 
-    non captés par un simple indice de végétation. 
-    Confluence devrait être plus chaude selon le modèle — en réalité, 
-    l'eau atténue significativement l'ICU.
-    """)
+    st.markdown(
+        "#### 💧 Présence d'eau\n"
+        "La proximité de la Saône ou du Rhône crée des couloirs de fraîcheur qu'un simple indice "
+        "de végétation ignore. Dans les données, Confluence est d'ailleurs un peu moins chaude "
+        "que ce que prédit le modèle."
+    )
 
 st.divider()
 
@@ -222,8 +250,25 @@ C'est ce que font Météo-France et les chercheurs avec des modèles comme **MAp
 et ça demande des années de calibration, pas une régression linéaire sur 3 colonnes.
 """)
 
-# ─────────────────────────────────────────
-# FOOTER
+# ─────────────────────────────────────────# APPEL À L'ACTION
+# ─────────────────────────────────────
+st.divider()
+
+cta_left, cta_right = st.columns([3, 2])
+with cta_left:
+    st.markdown("""
+### 👋 On continue ailleurs ?
+Je suis **Badreddine**, ingénieur en mathématiques appliquées à Lyon. Je construis des outils data,
+des dashboards et des modèles, et je partage ce que j'apprends au passage.
+""")
+with cta_right:
+    st.markdown(
+        "🌐 **[badreddineek.com](https://badreddineek.com)**\n\n"
+        "🧑‍💻 **[Mon portfolio](https://portfolio.badreddineek.com)**\n\n"
+        "⭐ **[Le code sur GitHub](https://github.com/BadreddineEK/canicule-lyon-icu-model)**"
+    )
+
+# ─────────────────────────────────────# FOOTER
 # ─────────────────────────────────────────
 st.divider()
 st.caption("""
