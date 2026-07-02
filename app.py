@@ -15,6 +15,7 @@ from utils.viz import (
     plot_correlation_matrix,
     plot_feature_importance,
     plot_scatter_reel_vs_predit,
+    plot_heat_map,
 )
 
 # ─────────────────────────────────────────
@@ -85,6 +86,27 @@ st.caption(
     "Par [Badreddine EL KHAMLICHI](https://badreddineek.com) · ingénieur en mathématiques appliquées, Lyon · "
     "[Portfolio](https://portfolio.badreddineek.com) · "
     "[Code source](https://github.com/BadreddineEK/canicule-lyon-icu-model)"
+)
+
+st.divider()
+
+# ─────────────────────────────────────────
+# SECTION 0 : LE PHÉNOMÈNE, VU DU CIEL
+# ─────────────────────────────────────────
+st.markdown("## 🗺️ Le phénomène, vu du ciel")
+
+st.markdown("""
+Chaque point est un quartier de la métropole. Plus il est **gros et rouge**, plus il reste chaud
+la nuit par rapport à la campagne autour. On voit déjà la logique à l'œil nu : ça chauffe au centre,
+ça respire en périphérie. Tout le jeu, ensuite, c'est de savoir si un modèle peut *vraiment*
+capturer ça — ou juste en donner l'illusion.
+""")
+
+safe_plot(plot_heat_map, df, theme)
+
+st.caption(
+    "ΔT = écart de température nocturne par rapport à une zone rurale de référence, "
+    "pendant un épisode de canicule (ordres de grandeur d'après les cartographies Météo-France)."
 )
 
 st.divider()

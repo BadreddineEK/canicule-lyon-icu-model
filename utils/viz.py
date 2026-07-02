@@ -203,3 +203,45 @@ def plot_scatter_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray, theme
         yaxis_title="ICU prédit (°C)",
     )
     return _apply_theme(fig, height=420, theme=theme)
+
+
+@st.cache_data(show_spinner=False)
+def plot_heat_map(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
+    """Carte de Lyon : chaque quartier coloré et dimensionné selon l'intensité
+    de l'îlot de chaleur (écart de température réel vs zone rurale)."""
+    p = _palette(theme)
+    map_style = "carto-positron" if theme == "light" else "carto-darkmatter"
+
+    fig = go.Figure(go.Scattermapbox(
+        lat=df["lat"],
+        lon=df["lon"],
+        mode="markers",
+        marker=dict(
+            size=df["icu_reel"] * 5 + 12,
+            color=df["icu_reel"],
+            colorscale="YlOrRd",
+            cmin=0,
+            cmax=float(df["icu_reel"].max()),
+            colorbar=dict(title="ΔT (°C)"),
+            opacity=0.9,
+        ),
+        text=df["quartier"],
+        customdata=df["icu_reel"],
+        hovertemplate="<b>%{text}</b><br>ΔT vs campagne : %{customdata:.1f} °C<extra></extra>",
+    ))
+
+    fig.update_layout(
+        title="Où se concentre la chaleur ? Les îlots de chaleur de Lyon",
+        mapbox=dict(
+            style=map_style,
+            center=dict(lat=45.762, lon=4.86),
+            zoom=10.1,
+        ),
+        height=520,
+        margin=dict(l=10, r=10, t=70, b=10),
+        paper_bgcolor=p["bg"],
+        font=dict(color=p["font"], size=13),
+        title_font=dict(size=16),
+        hoverlabel=dict(font_size=13),
+    )
+    return fig
