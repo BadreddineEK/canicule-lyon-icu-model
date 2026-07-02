@@ -16,6 +16,7 @@ from utils.viz import (
     plot_feature_importance,
     plot_scatter_reel_vs_predit,
     plot_heat_map,
+    plot_gauge,
 )
 
 # ─────────────────────────────────────────
@@ -80,14 +81,6 @@ st.subheader(
     "Et c'est justement pour ça qu'il faut s'en méfier."
 )
 
-st.markdown("""
-> **Le pitch** : la nuit, en pleine canicule, le centre de Lyon peut rester plusieurs degrés
-> plus chaud que la campagne autour — c'est l'îlot de chaleur urbain. J'ai voulu voir jusqu'où
-> un modèle tout ce qu'il y a de plus classique — une régression linéaire sur 3 variables —
-> pouvait reproduire ce phénomène. Un score flatteur, quelques ratés révélateurs, et une bonne
-> leçon sur ce qu'un « bon » chiffre cache.
-""")
-
 st.caption(
     "Par [Badreddine EL KHAMLICHI](https://badreddineek.com) · ingénieur en mathématiques appliquées, Lyon · "
     "[Portfolio](https://portfolio.badreddineek.com) · "
@@ -103,9 +96,9 @@ st.markdown("## 🗺️ Le phénomène, vu du ciel")
 
 st.markdown("""
 Chaque point est un quartier de la métropole. Plus il est **gros et rouge**, plus il reste chaud
-la nuit par rapport à la campagne autour. On voit déjà la logique à l'œil nu : ça chauffe au centre,
-ça respire en périphérie. Tout le jeu, ensuite, c'est de savoir si un modèle peut *vraiment*
-capturer ça — ou juste en donner l'illusion.
+la nuit par rapport à la campagne autour. La logique se voit déjà à l'œil nu : ça chauffe au centre,
+ça respire en périphérie. Reste à savoir si un modèle arrive vraiment à capturer ça, ou s'il fait
+juste illusion.
 """)
 
 safe_plot(plot_heat_map, df, theme)
@@ -168,8 +161,8 @@ st.info(
 )
 
 st.markdown("""
-**Hypothèse naïve** : si on connaît la végétation, la densité de population et la distance au centre,
-on peut prédire l'écart de température. Simple, non ?
+L'hypothèse : avec la végétation, la densité de population et la distance au centre, on devrait
+pouvoir prédire l'écart de température d'un quartier.
 """)
 
 st.caption(
@@ -183,14 +176,45 @@ with col_b:
     safe_plot(plot_correlation_matrix, df, theme)
 
 # ─────────────────────────────────────────
+# SECTION 2bis : SIMULATEUR (interactif)
+# ─────────────────────────────────────────
+st.markdown("## 🎮 À toi de jouer : invente un quartier")
+st.markdown(
+    "Bouge les curseurs pour composer un quartier imaginaire. Le modèle recalcule sa prédiction "
+    "en direct : à toi de voir ce qui réchauffe et ce qui rafraîchit."
+)
+
+sim_left, sim_right = st.columns([1, 1])
+with sim_left:
+    sim_ndvi = st.slider("🌿 Végétation (NDVI)", 0.0, 0.8, 0.20, 0.01,
+                         help="0 = béton nu, 0.8 = très végétalisé")
+    sim_dens = st.slider("👥 Densité de population (hab/km²)", 0, 25000, 10000, 500)
+    sim_dist = st.slider("📍 Distance au centre (km)", 0.0, 12.0, 3.0, 0.5)
+
+X_sim = pd.DataFrame([[sim_ndvi, sim_dens, sim_dist]], columns=FEATURES)
+pred_sim = float(model.predict(scaler.transform(X_sim))[0])
+pred_affiche = max(pred_sim, 0.0)
+
+with sim_right:
+    safe_plot(plot_gauge, pred_affiche, theme, 7.0)
+
+plus_chauds = int((df["icu_reel"] < pred_sim).sum())
+ecart_moyen = pred_sim - df["icu_reel"].mean()
+st.markdown(
+    f"Avec ces réglages, le modèle prédit **{pred_affiche:.1f} °C** d'écart avec la campagne. "
+    f"Ce quartier fictif serait plus chaud que **{plus_chauds} des {len(df)}** quartiers réels, "
+    f"soit **{ecart_moyen:+.1f} °C** par rapport à la moyenne de l'échantillon."
+)
+
+# ─────────────────────────────────────────
 # SECTION 3 : LA CONFRONTATION
 # ─────────────────────────────────────────
 st.markdown("## 🔬 La confrontation : réel vs prédit")
 
 st.markdown("""
 Le modèle suit bien la tendance générale : centre dense et chaud, périphérie végétalisée et fraîche.
-Mais un chiffre global lisse toujours les détails. En regardant quartier par quartier, un cas sort
-nettement du lot — et c'est le plus instructif.
+Mais une moyenne cache les détails. Quartier par quartier, un cas sort du lot, et c'est le plus
+intéressant à regarder.
 """)
 
 st.caption(
@@ -282,9 +306,9 @@ st.divider()
 st.markdown("## 💡 Pourquoi le modèle simple ne suffit pas")
 
 st.markdown(f"""
-**{results.r2:.0%} de variance expliquée avec 3 variables, ça impressionne.** Mais sur seulement
-14 quartiers, ce chiffre est plus une alerte qu'un trophée : quelques points bien alignés suffisent
-à le gonfler. Et les {(1 - results.r2):.0%} qui manquent dépendent de phénomènes qu'aucune colonne
+**{results.r2:.0%} de variance expliquée avec 3 variables, ça en jette.** Mais sur 14 quartiers
+seulement, ce chiffre veut moins dire qu'on croit : quelques points bien alignés suffisent à le
+gonfler. Et les {(1 - results.r2):.0%} qui manquent dépendent de phénomènes qu'aucune colonne
 simple ne capture :
 """)
 
@@ -319,8 +343,8 @@ Un modèle plus réaliste nécessiterait :
 - La **morphologie urbaine** (ratio H/W, orientation)
 - Les **flux de chaleur anthropique** (trafic, climatiseurs, industrie)
 
-C'est ce que font Météo-France et les chercheurs avec des modèles comme **MApUCE** ou **TEB** — 
-et ça demande des années de calibration, pas une régression linéaire sur 3 colonnes.
+C'est ce que font Météo-France et les chercheurs avec des modèles comme **MApUCE** ou **TEB**. Ça
+demande des années de calibration, pas une régression linéaire sur 3 colonnes.
 """)
 
 # ─────────────────────────────────────────# APPEL À L'ACTION

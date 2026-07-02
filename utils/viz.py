@@ -245,3 +245,31 @@ def plot_heat_map(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         hoverlabel=dict(font_size=13),
     )
     return fig
+
+
+def plot_gauge(value: float, theme: str = "light", vmax: float = 7.0) -> go.Figure:
+    """Jauge (thermomètre) affichant un écart de température prédit."""
+    p = _palette(theme)
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value,
+        number={"suffix": " °C", "font": {"size": 42, "color": p["font"]}},
+        gauge={
+            "axis": {"range": [0, vmax], "tickcolor": p["font"], "tickfont": {"color": p["font"]}},
+            "bar": {"color": COLOR_REEL},
+            "bgcolor": p["bg"],
+            "borderwidth": 0,
+            "steps": [
+                {"range": [0, vmax * 0.33], "color": "#D6EAF8"},
+                {"range": [vmax * 0.33, vmax * 0.66], "color": "#FAD7A0"},
+                {"range": [vmax * 0.66, vmax], "color": "#F5B7B1"},
+            ],
+        },
+    ))
+    fig.update_layout(
+        height=260,
+        margin=dict(l=20, r=20, t=30, b=10),
+        paper_bgcolor=p["bg"],
+        font=dict(color=p["font"]),
+    )
+    return fig
