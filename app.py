@@ -40,9 +40,9 @@ def safe_plot(fig_func, *args, **kwargs):
 def get_active_theme() -> str:
     """Renvoie le thème actif ('light' ou 'dark') pour adapter les graphiques."""
     try:
-        return getattr(st.context.theme, "type", None) or "dark"
+        return getattr(st.context.theme, "type", None) or "light"
     except Exception:
-        return "dark"
+        return "light"
 
 # ─────────────────────────────────────
 # LOAD DATA & TRAIN MODEL
@@ -71,15 +71,16 @@ theme = get_active_theme()
 # ─────────────────────────────────────
 st.title("🌡️ Îlot de chaleur urbain à Lyon")
 st.subheader(
-    f"Mon modèle simple explique {results.r2:.0%} des écarts de température entre quartiers. "
+    f"Une simple régression linéaire explique {results.r2:.0%} des écarts de température entre quartiers. "
     "Et c'est justement pour ça qu'il faut s'en méfier."
 )
 
 st.markdown("""
 > **Le pitch** : la nuit, en pleine canicule, le centre de Lyon peut rester plusieurs degrés
 > plus chaud que la campagne autour — c'est l'îlot de chaleur urbain. J'ai voulu voir jusqu'où
-> une régression linéaire toute simple, sur 3 variables, pouvait reproduire ce phénomène.
-> Un score flatteur, quelques ratés révélateurs, et une bonne leçon sur ce qu'un « bon » chiffre cache.
+> un modèle tout ce qu'il y a de plus classique — une régression linéaire sur 3 variables —
+> pouvait reproduire ce phénomène. Un score flatteur, quelques ratés révélateurs, et une bonne
+> leçon sur ce qu'un « bon » chiffre cache.
 """)
 
 st.caption(
@@ -116,7 +117,7 @@ st.divider()
 # ─────────────────────────────────────────
 with st.expander("📂 Données utilisées — 14 quartiers de la métropole lyonnaise", expanded=False):
     feat_desc = get_feature_descriptions()
-    st.markdown("**Variables du modèle naïf :**")
+    st.markdown("**Variables du modèle :**")
     for feat, desc in feat_desc.items():
         st.markdown(f"- `{feat}` : {desc}")
     st.dataframe(
@@ -125,7 +126,20 @@ with st.expander("📂 Données utilisées — 14 quartiers de la métropole lyo
         .set_index("quartier"),
         use_container_width=True,
     )
-    st.caption("Sources : Météo-France (ICU), INSEE 2021 (population), estimation NDVI par quartier")
+    st.markdown("""
+**D'où viennent ces chiffres ?** En toute transparence, ce sont des **valeurs reconstruites pour la
+démonstration**, pas un jeu de données officiel téléchargé tel quel :
+
+- **Densité de population** — ordres de grandeur d'après l'INSEE (recensement 2021).
+- **Distance au centre** — mesurée depuis la place Bellecour.
+- **NDVI (végétation)** — estimé par quartier d'après la couverture végétale connue, **pas** un calcul
+  satellite pixel par pixel.
+- **ΔT / ICU réel** — ordres de grandeur repris des cartographies publiques d'îlot de chaleur de
+  Météo-France, **pas** des relevés de stations horodatés.
+
+Autrement dit : les valeurs sont **plausibles et cohérentes entre elles**, mais elles servent à
+illustrer une démarche, pas à publier une mesure.
+""")
 
 # ─────────────────────────────────────────
 # SECTION 2 : LE MODÈLE NAÏF
@@ -186,6 +200,38 @@ with col_c:
     safe_plot(plot_scatter_reel_vs_predit, df, results.predictions, theme)
 with col_d:
     safe_plot(plot_residuals, df_out, theme)
+
+# ─────────────────────────────────────────
+# SECTION 3bis : EXPLORER UN QUARTIER (interactif)
+# ─────────────────────────────────────────
+st.markdown("### 🔎 Explore un quartier toi-même")
+st.caption("Choisis un quartier pour voir ce que le modèle prédit, et de combien il se trompe.")
+
+choix = st.selectbox(
+    "Quartier",
+    df_out["quartier"].tolist(),
+    label_visibility="collapsed",
+)
+row = df_out[df_out["quartier"] == choix].iloc[0]
+predit = row["icu_reel"] - row["residual"]
+
+m1, m2, m3 = st.columns(3)
+m1.metric("ΔT réel", f"{row['icu_reel']:.1f} °C")
+m2.metric("ΔT prédit", f"{predit:.1f} °C")
+m3.metric(
+    "Écart du modèle", f"{row['residual']:+.1f} °C",
+    help="Positif = le modèle sous-estime la chaleur ; négatif = il la surestime",
+)
+
+f1, f2, f3 = st.columns(3)
+f1.metric("🌿 Végétation (NDVI)", f"{row['ndvi']:.2f}")
+f2.metric("👥 Densité", f"{row['densite_pop']:,.0f} hab/km²".replace(",", " "))
+f3.metric("📍 Distance au centre", f"{row['dist_centre_km']:.1f} km")
+
+if row["is_outlier"]:
+    st.warning(f"⚠️ {choix} fait partie des quartiers que le modèle prédit mal (écart > 0,8 °C).")
+else:
+    st.success(f"✅ Sur {choix}, le modèle tombe juste (écart < 0,8 °C).")
 
 # ─────────────────────────────────────────
 # SECTION 4 : LES CAS PROBLÉMATIQUES

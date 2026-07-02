@@ -1,6 +1,6 @@
 # 🌡️ Îlot de Chaleur Urbain à Lyon — Modèle naïf vs réalité
 
-> *« J'ai essayé de prédire les quartiers les plus chauds de Lyon pendant la canicule. Mon modèle simple s'en sort bien... jusqu'à ce qu'on regarde de près. Voici pourquoi. »*
+> *« J'ai voulu prédire les quartiers les plus chauds de Lyon pendant la canicule avec une simple régression linéaire. Elle s'en sort bien... jusqu'à ce qu'on regarde de près. Voici pourquoi. »*
 
 **▶️ Démo en ligne : [canicule-lyon-icu-model.streamlit.app](https://canicule-lyon-icu-model.streamlit.app/)**
 
