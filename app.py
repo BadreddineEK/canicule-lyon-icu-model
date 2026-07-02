@@ -26,17 +26,34 @@ st.set_page_config(
     layout="wide",
 )
 
-# ─────────────────────────────────────────
+
+def safe_plot(fig_func, *args, **kwargs):
+    """Affiche un graphique en isolant les erreurs : un souci sur un graphe
+    n'interrompt pas toute la page."""
+    try:
+        st.plotly_chart(fig_func(*args, **kwargs), use_container_width=True)
+    except Exception:
+        st.warning("Ce graphique n'a pas pu être généré. Le reste de l'analyse reste disponible.")
+
+# ─────────────────────────────────────
 # LOAD DATA & TRAIN MODEL
-# ─────────────────────────────────────────
-@st.cache_data
+# ─────────────────────────────────────
+@st.cache_data(show_spinner=False)
 def load_and_train():
     df = get_quartiers_data()
     model, scaler, results = train_naive_model(df)
     df_out = identify_outliers(df, results.residuals)
     return df, model, scaler, results, df_out
 
-df, model, scaler, results, df_out = load_and_train()
+
+try:
+    df, model, scaler, results, df_out = load_and_train()
+except Exception:
+    st.error(
+        "Impossible de charger les données ou d'entraîner le modèle. "
+        "Vérifiez l'installation des dépendances avec `pip install -r requirements.txt`."
+    )
+    st.stop()
 
 # ─────────────────────────────────────────
 # HEADER
@@ -79,6 +96,11 @@ col2.metric("Erreur moyenne (MAE)", f"{results.mae:.2f} °C", help="Erreur absol
 col3.metric("Quartiers mal prédits", f"{df_out['is_outlier'].sum()} / {len(df)}",
             help="Quartiers avec erreur > 0.8°C")
 
+st.caption(
+    "Le **R²** indique la part de la réalité que le modèle explique (100 % = prédiction parfaite). "
+    "La **MAE** est l'erreur moyenne, en degrés. « Mal prédit » = écart supérieur à 0,8 °C."
+)
+
 st.info(
     f"**Formule** : `{get_model_formula(results.coefficients, results.intercept)}`",
     icon="📐"
@@ -89,11 +111,15 @@ st.markdown("""
 on peut prédire l'écart de température. Simple, non ?
 """)
 
+st.caption(
+    "Le **NDVI** est un indice de végétation entre 0 (béton nu) et 1 (forêt dense), estimé ici par quartier."
+)
+
 col_a, col_b = st.columns(2)
 with col_a:
-    st.plotly_chart(plot_feature_importance(results.coefficients), use_container_width=True)
+    safe_plot(plot_feature_importance, results.coefficients)
 with col_b:
-    st.plotly_chart(plot_correlation_matrix(df), use_container_width=True)
+    safe_plot(plot_correlation_matrix, df)
 
 # ─────────────────────────────────────────
 # SECTION 3 : LA CONFRONTATION
@@ -105,13 +131,18 @@ Le modèle prédit plutôt bien les cas extrêmes (centre-ville chaud, périphé
 Mais il se plante sur plusieurs quartiers intermédiaires — et c'est là que ça devient intéressant.
 """)
 
-st.plotly_chart(plot_reel_vs_predit(df, results.predictions), use_container_width=True)
+st.caption(
+    "Un **résidu** est l'écart entre la température réelle et celle prédite : "
+    "positif = le modèle a sous-estimé la chaleur, négatif = il l'a surestimée."
+)
+
+safe_plot(plot_reel_vs_predit, df, results.predictions)
 
 col_c, col_d = st.columns(2)
 with col_c:
-    st.plotly_chart(plot_scatter_reel_vs_predit(df, results.predictions), use_container_width=True)
+    safe_plot(plot_scatter_reel_vs_predit, df, results.predictions)
 with col_d:
-    st.plotly_chart(plot_residuals(df_out), use_container_width=True)
+    safe_plot(plot_residuals, df_out)
 
 # ─────────────────────────────────────────
 # SECTION 4 : LES CAS PROBLÉMATIQUES
@@ -130,8 +161,25 @@ if len(outliers) > 0:
 else:
     st.success("Le modèle prédit tous les quartiers avec moins de 0.8°C d'erreur.")
 
-# ─────────────────────────────────────────
-# SECTION 5 : LA LEÇON
+# ─────────────────────────────────────────# SECTION : LIMITES & HONNÊTETÉ SUR LES DONNÉES
+# ─────────────────────────────────────
+st.markdown("## ⚠️ Limites de ce modèle (à lire avant de commenter)")
+
+st.markdown("""
+Ce projet est **pédagogique** : il montre une démarche, pas un résultat de recherche. En toute transparence :
+
+- **Les valeurs NDVI sont des estimations par quartier**, pas des mesures satellite précises. Un vrai NDVI se calcule pixel par pixel à partir d'images Sentinel ou Landsat.
+- **Les écarts de température (ICU) sont des ordres de grandeur** tirés de cartographies et publications Météo-France, pas des relevés station par station horodatés.
+- **14 quartiers, c'est un très petit échantillon.** Sur si peu de points, un R² élevé peut donner une fausse impression de fiabilité.
+- **Le modèle est évalué sur les données qui ont servi à l'entraîner** (pas de validation croisée) : ses performances sur de nouveaux quartiers seraient plus faibles.
+- **Une régression linéaire suppose des effets simples et additifs**, alors que la physique de la chaleur urbaine est fortement non linéaire.
+
+Autrement dit : ces chiffres servent à illustrer un raisonnement, pas à guider une décision d'aménagement.
+""")
+
+st.divider()
+
+# ─────────────────────────────────────# SECTION 5 : LA LEÇON
 # ─────────────────────────────────────────
 st.markdown("## 💡 Pourquoi le modèle simple ne suffit pas")
 

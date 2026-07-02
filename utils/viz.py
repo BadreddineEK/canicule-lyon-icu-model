@@ -1,25 +1,53 @@
 """
 Helpers de visualisation Plotly pour le dashboard.
+Palette et mise en page centralisées pour garder tous les graphiques cohérents.
+Le seuil d'écart utilisé pour repérer un quartier mal prédit.
 """
 
-import plotly.graph_objects as go
-import plotly.express as px
-import pandas as pd
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
-# Palette couleurs cohérente
-COLOR_REEL = "#E74C3C"
-COLOR_PREDIT = "#3498DB"
-COLOR_OUTLIER = "#F39C12"
-COLOR_OK = "#2ECC71"
+# Seuil (en °C) au-delà duquel une prédiction est considérée comme "ratée".
+# Doit rester aligné avec model.naive_model.identify_outliers.
+OUTLIER_THRESHOLD = 0.8
+
+# Palette cohérente sur tous les graphiques
+COLOR_REEL = "#E74C3C"      # rouge : température réelle
+COLOR_PREDIT = "#3498DB"    # bleu : prédiction du modèle
+COLOR_WARM = "#E74C3C"      # effet réchauffant (coefficient positif)
+COLOR_COOL = "#3498DB"      # effet rafraîchissant (coefficient négatif)
+COLOR_OUTLIER = "#F39C12"   # orange : quartier mal prédit
+COLOR_OK = "#2ECC71"        # vert : quartier bien prédit
+
+_BG = "#0e1117"
+_GRID = "rgba(255,255,255,0.08)"
 
 
+def _apply_theme(fig: go.Figure, height: int) -> go.Figure:
+    """Applique la même charte (fond, police, marges, grille) à tous les graphiques."""
+    fig.update_layout(
+        plot_bgcolor=_BG,
+        paper_bgcolor=_BG,
+        font=dict(color="white", size=13),
+        title_font=dict(size=16),
+        height=height,
+        margin=dict(l=10, r=10, t=70, b=10),
+        hoverlabel=dict(font_size=13),
+    )
+    fig.update_xaxes(gridcolor=_GRID, zerolinecolor=_GRID)
+    fig.update_yaxes(gridcolor=_GRID, zerolinecolor=_GRID)
+    return fig
+
+
+@st.cache_data(show_spinner=False)
 def plot_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray) -> go.Figure:
     """Graphique en barres groupées : ICU réel vs prédit par quartier."""
     fig = go.Figure()
 
     fig.add_trace(go.Bar(
-        name="ICU réel mesuré",
+        name="ICU réel (référence Météo-France)",
         x=df["quartier"],
         y=df["icu_reel"],
         marker_color=COLOR_REEL,
@@ -38,17 +66,14 @@ def plot_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray) -> go.Figure:
         barmode="group",
         title="Écart de température ICU : réalité vs modèle naïf",
         xaxis_title="Quartier",
-        yaxis_title="ΔT par rapport à la campagne (°C)",
+        yaxis_title="ΔT vs zone rurale de référence (°C)",
         xaxis_tickangle=-35,
-        legend=dict(orientation="h", y=1.12),
-        plot_bgcolor="#0e1117",
-        paper_bgcolor="#0e1117",
-        font=dict(color="white"),
-        height=450,
+        legend=dict(orientation="h", y=1.15),
     )
-    return fig
+    return _apply_theme(fig, height=450)
 
 
+@st.cache_data(show_spinner=False)
 def plot_residuals(df_out: pd.DataFrame) -> go.Figure:
     """Graphique des résidus — met en évidence les quartiers problématiques."""
     colors = [COLOR_OUTLIER if o else COLOR_OK for o in df_out["is_outlier"]]
@@ -62,25 +87,22 @@ def plot_residuals(df_out: pd.DataFrame) -> go.Figure:
     ))
 
     fig.add_hline(y=0, line_dash="dot", line_color="white", opacity=0.4)
-    fig.add_hline(y=0.8, line_dash="dash", line_color=COLOR_OUTLIER, opacity=0.5,
-                  annotation_text="seuil d'alerte (+0.8°C)", annotation_position="top right")
-    fig.add_hline(y=-0.8, line_dash="dash", line_color=COLOR_OUTLIER, opacity=0.5)
+    fig.add_hline(y=OUTLIER_THRESHOLD, line_dash="dash", line_color=COLOR_OUTLIER, opacity=0.5,
+                  annotation_text=f"seuil d'alerte (+{OUTLIER_THRESHOLD}°C)", annotation_position="top right")
+    fig.add_hline(y=-OUTLIER_THRESHOLD, line_dash="dash", line_color=COLOR_OUTLIER, opacity=0.5)
 
     fig.update_layout(
-        title="Résidus : là où le modèle se trompe le plus",
+        title="Résidus : écart entre réalité et prédiction (°C)",
         xaxis_title="Quartier",
         yaxis_title="Erreur du modèle (°C)",
         xaxis_tickangle=-35,
-        plot_bgcolor="#0e1117",
-        paper_bgcolor="#0e1117",
-        font=dict(color="white"),
-        height=420,
     )
-    return fig
+    return _apply_theme(fig, height=420)
 
 
+@st.cache_data(show_spinner=False)
 def plot_correlation_matrix(df: pd.DataFrame) -> go.Figure:
-    """Heatmap de corrélation entre les features et la cible."""
+    """Heatmap de corrélation entre les variables et la cible."""
     cols = ["ndvi", "densite_pop", "dist_centre_km", "icu_reel"]
     labels = ["Végétation (NDVI)", "Densité pop.", "Dist. centre (km)", "ICU réel (°C)"]
     corr = df[cols].corr()
@@ -96,16 +118,11 @@ def plot_correlation_matrix(df: pd.DataFrame) -> go.Figure:
         showscale=True,
     ))
 
-    fig.update_layout(
-        title="Corrélations entre variables",
-        plot_bgcolor="#0e1117",
-        paper_bgcolor="#0e1117",
-        font=dict(color="white"),
-        height=380,
-    )
-    return fig
+    fig.update_layout(title="Corrélations entre variables")
+    return _apply_theme(fig, height=380)
 
 
+@st.cache_data(show_spinner=False)
 def plot_feature_importance(coefficients: dict) -> go.Figure:
     """Barres horizontales des coefficients standardisés du modèle."""
     labels = {
@@ -115,7 +132,8 @@ def plot_feature_importance(coefficients: dict) -> go.Figure:
     }
     feats = list(coefficients.keys())
     coefs = list(coefficients.values())
-    colors = [COLOR_REEL if c < 0 else COLOR_PREDIT for c in coefs]
+    # Bleu = fait baisser la température (coef négatif), rouge = fait monter (coef positif)
+    colors = [COLOR_COOL if c < 0 else COLOR_WARM for c in coefs]
 
     fig = go.Figure(go.Bar(
         x=coefs,
@@ -130,16 +148,13 @@ def plot_feature_importance(coefficients: dict) -> go.Figure:
     fig.update_layout(
         title="Importance des variables (coefficients standardisés)",
         xaxis_title="Coefficient",
-        plot_bgcolor="#0e1117",
-        paper_bgcolor="#0e1117",
-        font=dict(color="white"),
-        height=280,
     )
-    return fig
+    return _apply_theme(fig, height=280)
 
 
+@st.cache_data(show_spinner=False)
 def plot_scatter_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray) -> go.Figure:
-    """Scatter plot réel vs prédit avec droite de régression parfaite."""
+    """Nuage de points réel vs prédit avec la droite de prédiction parfaite."""
     y_reel = df["icu_reel"].values
     min_v, max_v = min(y_reel.min(), predictions.min()), max(y_reel.max(), predictions.max())
 
@@ -160,7 +175,7 @@ def plot_scatter_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray) -> go
         mode="markers+text",
         marker=dict(
             size=10,
-            color=[COLOR_OUTLIER if abs(r - p) > 0.8 else COLOR_OK
+            color=[COLOR_OUTLIER if abs(r - p) > OUTLIER_THRESHOLD else COLOR_OK
                    for r, p in zip(y_reel, predictions)],
         ),
         text=df["quartier"],
@@ -173,9 +188,5 @@ def plot_scatter_reel_vs_predit(df: pd.DataFrame, predictions: np.ndarray) -> go
         title="Valeurs réelles vs prédites",
         xaxis_title="ICU réel (°C)",
         yaxis_title="ICU prédit (°C)",
-        plot_bgcolor="#0e1117",
-        paper_bgcolor="#0e1117",
-        font=dict(color="white"),
-        height=420,
     )
-    return fig
+    return _apply_theme(fig, height=420)
