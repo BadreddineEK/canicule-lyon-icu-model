@@ -347,6 +347,43 @@ def plot_expo_by_lcz(df_ilots: pd.DataFrame, theme: str = "light") -> go.Figure:
     return _apply_theme(fig, height=340, theme=theme)
 
 
+@st.cache_data(show_spinner=False)
+def plot_hot_ilots_map(df_ilots: pd.DataFrame, min_score: float, theme: str = "light") -> go.Figure:
+    """Ne montre que les îlots les plus exposés (score ≥ seuil) : les poches où
+    la chaleur nocturne se concentre, donc les priorités d'action."""
+    p = _palette(theme)
+    map_style = "carto-positron" if theme == "light" else "carto-darkmatter"
+    d = df_ilots[df_ilots["expo_score"] >= min_score]
+
+    fig = go.Figure(go.Scattermapbox(
+        lat=d["lat"],
+        lon=d["lon"],
+        mode="markers",
+        marker=dict(
+            size=_ilot_sizes(d["surface"], 4, 14),
+            color=d["expo_score"],
+            colorscale="YlOrRd",
+            cmin=0, cmax=2,
+            colorbar=dict(title="Chaleur<br>nocturne", tickvals=[1, 2], ticktext=["Moyen", "Fort"]),
+            opacity=0.8,
+        ),
+        text=d["commune"],
+        customdata=d[["lcz_groupe", "expo_score"]],
+        hovertemplate="<b>%{text}</b><br>%{customdata[0]}<br>Chaleur nocturne : %{customdata[1]:+.0f}<extra></extra>",
+    ))
+    fig.update_layout(
+        title=f"{len(d):,} îlots à cibler (chaleur nocturne ≥ {min_score:+.0f})".replace(",", " "),
+        mapbox=dict(style=map_style, center=dict(lat=45.752, lon=4.85), zoom=10.3),
+        height=560,
+        margin=dict(l=10, r=10, t=70, b=10),
+        paper_bgcolor=p["bg"],
+        font=dict(color=p["font"], size=13),
+        title_font=dict(size=16),
+        hoverlabel=dict(font_size=13),
+    )
+    return fig
+
+
 def plot_gauge(value: float, theme: str = "light", vmin: float = -1.0, vmax: float = 2.0) -> go.Figure:
     """Jauge affichant un score d'exposition nocturne prédit."""
     p = _palette(theme)

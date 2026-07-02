@@ -34,8 +34,8 @@ Ce sont de **vraies mesures d'aménagement**, pas des relevés de thermomètre :
 - La **carte au grain fin** : ~29 657 îlots réels, colorés du bleu (rafraîchissant) au rouge (fort), lisibles rue par rue
 - Le **piège de l'agrégation** : la même réalité moyennée en 67 communes, un R² de 87 %… et pourquoi il ment
 - Un **explorateur** : zoom sur les îlots d'une commune pour voir son contraste interne (un parc frais à côté d'un cœur dense brûlant)
-- La **tendance de fond** : bâti compact → chaleur, coefficients et classement des communes
-- Un **simulateur** interactif de la relation encodée par la donnée
+- La **tendance de fond** : chaleur nocturne moyenne par type de sol, mesurée directement sur les îlots (r ≈ 0,59)
+- Un **ciblage interactif** des poches les plus chaudes — les priorités de végétalisation, directement issues de la donnée
 
 ## 💡 La leçon data science
 

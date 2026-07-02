@@ -10,17 +10,16 @@ Données ouvertes : Métropole de Lyon, « Îlots de chaleur urbains » (GEOCLIM
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 from data.dataset import get_communes_data, get_ilots_data
-from model.naive_model import train_naive_model, identify_outliers, get_model_formula, FEATURES
+from model.naive_model import train_naive_model, get_model_formula
 from utils.viz import (
     plot_ilots_map,
     plot_commune_ilots,
     plot_heat_map,
     plot_expo_by_lcz,
     plot_top_communes,
-    plot_gauge,
+    plot_hot_ilots_map,
 )
 
 # ─────────────────────────────────────────
@@ -60,9 +59,8 @@ def load_ilots():
 @st.cache_data(show_spinner=False)
 def load_and_train():
     df = get_communes_data()
-    model, scaler, results = train_naive_model(df)
-    df_out = identify_outliers(df, results.residuals)
-    return df, model, scaler, results, df_out
+    _model, _scaler, results = train_naive_model(df)
+    return df, results
 
 
 @st.cache_data(show_spinner=False)
@@ -81,7 +79,7 @@ def aggregation_stats(df_ilots: pd.DataFrame):
 
 try:
     df_ilots = load_ilots()
-    df, model, scaler, results, df_out = load_and_train()
+    df, results = load_and_train()
     agg = aggregation_stats(df_ilots)
 except Exception:
     st.error(
@@ -239,30 +237,41 @@ st.caption(
 )
 
 # ─────────────────────────────────────────
-# SECTION 3bis : SIMULATEUR
+# SECTION 3bis : OÙ AGIR EN PRIORITÉ (interactif, actionnable, sans modèle)
 # ─────────────────────────────────────────
-st.markdown("### 🎮 La relation, en un curseur")
+st.markdown("## 🎯 Alors, où agir en priorité ?")
+
 st.markdown(
-    "Fais varier la composition d'une commune fictive et regarde le score que la donnée lui associerait."
+    "Sortir un constat, c'est bien ; le rendre utile, c'est mieux. La donnée brute permet de pointer "
+    "directement **les poches où la chaleur nocturne se concentre** — les cibles évidentes pour "
+    "végétaliser, désimperméabiliser, rafraîchir. Choisis le niveau d'exposition :"
 )
 
-sim_left, sim_right = st.columns([1, 1])
-with sim_left:
-    sim_veg = st.slider("🌿 Végétation (% de surface)", 0, 60, 10, 1)
-    sim_comp = st.slider("🏙️ Bâti compact (% de surface)", 0, 60, 20, 1)
-    sim_min = st.slider("🪨 Sol minéral (% de surface)", 0, 30, 6, 1)
-
-X_sim = pd.DataFrame([[sim_veg, sim_comp, sim_min]], columns=FEATURES)
-pred_sim = float(model.predict(scaler.transform(X_sim))[0])
-
-with sim_right:
-    safe_plot(plot_gauge, pred_sim, theme)
-
-plus_chaudes = int((df["expo_nuit_score"] < pred_sim).sum())
-st.markdown(
-    f"Score associé : **{pred_sim:+.2f}**. Une telle commune serait plus exposée la nuit que "
-    f"**{plus_chaudes} des {len(df)}** communes réelles."
+niveau = st.radio(
+    "Niveau d'exposition",
+    ["🔴 Uniquement les plus chauds (fort)", "🟠 Moyennement exposés et plus"],
+    horizontal=True,
+    label_visibility="collapsed",
 )
+min_score = 2 if niveau.startswith("🔴") else 1
+
+hot = df_ilots[df_ilots["expo_score"] >= min_score]
+top_hot = hot.groupby("commune").size().sort_values(ascending=False).head(5)
+
+col_hmap, col_hstat = st.columns([3, 2])
+with col_hmap:
+    safe_plot(plot_hot_ilots_map, df_ilots, min_score, theme)
+with col_hstat:
+    h1, h2 = st.columns(2)
+    h1.metric("Îlots concernés", f"{len(hot):,}".replace(",", " "))
+    h2.metric("Surface", f"{hot['surface'].sum() / 10000:,.0f} ha".replace(",", " "))
+    st.markdown("**Communes qui concentrent le plus ces poches :**")
+    for nom, n in top_hot.items():
+        st.markdown(f"- {nom} — **{n}** îlots")
+    st.caption(
+        "Ce ciblage sort directement des données, sans aucun modèle : ce sont des mesures "
+        "d'aménagement réelles, pas des prédictions."
+    )
 
 st.divider()
 
@@ -274,7 +283,8 @@ st.markdown("## 💡 Ce que je retiens")
 st.markdown(f"""
 1. **Sur la ville** : à Lyon, la nuit de canicule ne se joue pas à l'échelle du quartier mais du
    pâté de maisons. Densifier sans végétaliser fabrique des poches invivables — et il en existe
-   jusque dans les communes réputées « fraîches ».
+   jusque dans les communes réputées « fraîches ». La bonne nouvelle : ces poches sont
+   **identifiables une par une**, donc traitables.
 
 2. **Sur la data** : mon plus beau chiffre, **{results.r2:.0%}**, était le plus trompeur. Il venait
    d'avoir agrégé {n_ilots_fmt} mesures en {agg['n_communes']} points. La validation croisée
