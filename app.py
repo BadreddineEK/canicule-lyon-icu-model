@@ -34,11 +34,17 @@ st.set_page_config(
     layout="wide",
 )
 
+# Compteur remis à zéro à chaque rerun : garantit une clé unique par graphique
+# et évite StreamlitDuplicateElementId si deux graphiques sont identiques.
+_PLOT_SEQ = {"n": 0}
+
 
 def safe_plot(fig_func, *args, **kwargs):
     """Affiche un graphique en isolant les erreurs, pour ne jamais casser la page."""
+    _PLOT_SEQ["n"] += 1
     try:
-        st.plotly_chart(fig_func(*args, **kwargs), use_container_width=True)
+        st.plotly_chart(fig_func(*args, **kwargs), use_container_width=True,
+                        key=f"chart_{_PLOT_SEQ['n']}")
     except Exception as e:
         st.warning("Ce graphique n'a pas pu être généré. Le reste de l'analyse reste disponible.")
         with st.expander("Détails techniques"):
