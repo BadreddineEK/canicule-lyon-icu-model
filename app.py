@@ -45,6 +45,19 @@ st.markdown(
     }
     [data-testid="stMetricValue"] { font-weight: 700; }
     [data-testid="stMetricLabel"] { opacity: 0.85; }
+
+    /* Mobile : on empile les colonnes en pleine largeur pour rester lisible
+       (sinon les métriques et les cartes deviennent minuscules) */
+    @media (max-width: 640px) {
+        [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: 0.5rem; }
+        [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }
+        .block-container { padding-left: 0.9rem !important; padding-right: 0.9rem !important; padding-top: 2.5rem !important; }
+        h1 { font-size: 1.6rem !important; line-height: 1.25 !important; }
+        [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
