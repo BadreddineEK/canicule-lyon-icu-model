@@ -2,7 +2,7 @@
 
 > *« Pendant la canicule, je me suis demandé pourquoi certains coins de Lyon restaient étouffants la nuit quand d'autres respiraient. J'ai pris les vraies données de la Métropole, îlot par îlot. Et j'ai découvert que mon plus beau R² était aussi le plus trompeur. »*
 
-**▶️ Démo en ligne : [canicule-lyon-icu-model.streamlit.app](https://canicule-lyon-icu-model.streamlit.app/)**
+**▶️ Démo en ligne : [canicule-lyon-model.streamlit.app](https://canicule-lyon-model.streamlit.app/)**
 
 Un dashboard Streamlit qui cartographie l'îlot de chaleur urbain de Lyon à partir de **vraies données ouvertes**, au grain de l'îlot (~29 657 points réels) — et qui montre au passage **le piège de l'agrégation** : en résumant chaque commune à un chiffre, on décroche un R² flatteur en jetant 99,8 % du signal.
 
