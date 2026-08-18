@@ -34,6 +34,22 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown(
+    """
+    <style>
+    [data-testid="stMetric"] {
+        background: rgba(231, 76, 60, 0.06);
+        border: 1px solid rgba(231, 76, 60, 0.18);
+        border-radius: 12px;
+        padding: 12px 16px;
+    }
+    [data-testid="stMetricValue"] { font-weight: 700; }
+    [data-testid="stMetricLabel"] { opacity: 0.85; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Compteur remis à zéro à chaque rerun : garantit une clé unique par graphique
 # et évite StreamlitDuplicateElementId si deux graphiques sont identiques.
 _PLOT_SEQ = {"n": 0}
@@ -186,8 +202,7 @@ with col_model:
     st.metric("Erreur moyenne (MAE)", f"{results.mae:.2f}")
     st.info(f"`{get_model_formula(results.coefficients, results.intercept)}`", icon="📐")
     st.markdown(
-        f"**{results.r2:.0%}** de variance expliquée. Sur le papier, on dirait la maîtrise. "
-        "Sauf que ce chiffre est un mirage."
+        f"**{results.r2:.0%}** de variance expliquée. Sur le papier, on dirait la maîtrise…"
     )
 
 st.warning(
