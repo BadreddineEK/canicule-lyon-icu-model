@@ -34,12 +34,14 @@ Ce sont de **vraies mesures d'aménagement**, pas des relevés de thermomètre :
 - La **carte au grain fin** : ~29 657 îlots réels, colorés du bleu (rafraîchissant) au rouge (fort), lisibles rue par rue
 - Le **piège de l'agrégation** : la même réalité moyennée en 67 communes, un R² de 87 %… et pourquoi il ment
 - Un **explorateur** : zoom sur les îlots d'une commune pour voir son contraste interne (un parc frais à côté d'un cœur dense brûlant)
-- La **tendance de fond** : chaleur nocturne moyenne par type de sol, mesurée directement sur les îlots (r ≈ 0,59)
+- La **tendance de fond** : chaleur nocturne moyenne par type de sol, mesurée directement sur les îlots (η² ≈ 64 % de variance expliquée, corrélations avec intervalle de confiance)
 - Un **ciblage interactif** des poches les plus chaudes — les priorités de végétalisation, directement issues de la donnée
+
+> 🟢 **Lecture express** ou 🔬 **lecture preuve** : les titres et chiffres suffisent pour l'essentiel ; les volets « Creuser » déplient robustesse statistique, échelle de preuve et limites.
 
 ## 💡 La leçon data science
 
-Le plus beau chiffre du projet, un **R² de 87 %**, est aussi le plus trompeur : il vient d'avoir agrégé 29 657 mesures en 67 points. La **validation croisée le ramène à ~64 %** (très instable), et le grain fin le démasque.
+Le plus beau chiffre du projet, un **R² de 87 %**, est aussi le plus trompeur : il vient d'avoir agrégé 29 657 mesures en 67 points. La **validation croisée le ramène à ~64 %** (très instable, de 0,5 % à 95 % selon le découpage) — soit, presque exactement, l'ordre de grandeur du lien réel mesuré au grain fin (η² ≈ 64 %). Le « vrai » signal était là : le 87 % n'était que l'inflation d'échantillon.
 
 - **La bonne échelle** n'est pas la plus pratique, c'est celle où vit le phénomène — ici l'îlot, pas la commune.
 - **Agréger gonfle mécaniquement les corrélations** : un chiffre flatteur mérite toujours qu'on cherche ce qu'il cache.

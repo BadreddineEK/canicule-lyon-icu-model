@@ -91,3 +91,47 @@ def identify_outliers(df: pd.DataFrame, residuals: np.ndarray, threshold: float 
         residuals > 0, "Modèle sous-estime", "Modèle sur-estime"
     )
     return df_out.sort_values("abs_residual", ascending=False)
+
+
+def pearson_ci(x, y, alpha: float = 0.05) -> dict:
+    """Corrélation de Pearson AVEC intervalle de confiance à 95 % (transformée de Fisher).
+
+    Un coefficient sans incertitude ne veut rien dire sur 67 points : on donne donc
+    la fourchette dans laquelle vit la vraie corrélation. Sans SciPy : Fisher z + loi normale.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    mask = ~(np.isnan(x) | np.isnan(y))
+    x, y = x[mask], y[mask]
+    n = int(len(x))
+    if n < 4:
+        r = float(np.corrcoef(x, y)[0, 1]) if n > 1 else 0.0
+        return {"r": r, "lo": r, "hi": r, "n": n}
+    r = float(np.corrcoef(x, y)[0, 1])
+    r = min(max(r, -0.999999), 0.999999)
+    z = np.arctanh(r)
+    se = 1.0 / np.sqrt(n - 3)
+    zc = 1.96  # 95 %
+    lo, hi = np.tanh(z - zc * se), np.tanh(z + zc * se)
+    return {"r": r, "lo": float(lo), "hi": float(hi), "n": n}
+
+
+def eta_squared(groups, values) -> dict:
+    """Rapport de corrélation η² entre une variable catégorielle (type de sol / LCZ)
+    et une variable continue (exposition), au grain fin.
+
+    η² = part de la variance d'exposition expliquée par le seul type de sol.
+    C'est la mesure honnête de la force du lien à l'échelle de l'îlot, où l'on n'a
+    pas de pourcentages continus mais une classe LCZ par îlot.
+    """
+    d = pd.DataFrame({"g": np.asarray(groups), "v": np.asarray(values, dtype=float)})
+    d = d.dropna()
+    grand = d["v"].mean()
+    ss_tot = float(((d["v"] - grand) ** 2).sum())
+    if ss_tot <= 0:
+        return {"eta2": 0.0, "eta": 0.0, "n": int(len(d))}
+    ss_between = float(
+        d.groupby("g")["v"].apply(lambda s: len(s) * (s.mean() - grand) ** 2).sum()
+    )
+    eta2 = ss_between / ss_tot
+    return {"eta2": eta2, "eta": float(np.sqrt(eta2)), "n": int(len(d))}
